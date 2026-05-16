@@ -15,10 +15,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 
@@ -170,8 +172,16 @@ fun InstructionItem(
                 }
             }
             Text(text = description, style = MaterialTheme.typography.bodyMedium)
-            Button(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-                Text(buttonText)
+            Button(
+                onClick = onClick,
+                shape = RoundedCornerShape(4.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = Color.White
+                ),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(buttonText, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
         }
     }
