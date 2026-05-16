@@ -13,6 +13,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -105,6 +106,8 @@ fun AppScreen(
         }
     }
 
+    var showMenu by remember { mutableStateOf(false) }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -114,14 +117,27 @@ fun AppScreen(
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
                 actions = {
-                    IconButton(onClick = onNavigateToBinding) {
-                        Icon(Icons.Default.Person, contentDescription = "绑定信息")
+                    IconButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "更多")
                     }
-                    IconButton(onClick = onNavigateToInstructions) {
-                        Icon(Icons.Default.Info, contentDescription = "使用说明")
-                    }
-                    TextButton(onClick = { repository.clearEvents() }) {
-                        Text("清空")
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("个人信息修改") },
+                            onClick = {
+                                showMenu = false
+                                onNavigateToBinding()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("使用说明") },
+                            onClick = {
+                                showMenu = false
+                                onNavigateToInstructions()
+                            }
+                        )
                     }
                 }
             )
