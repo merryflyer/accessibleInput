@@ -131,13 +131,6 @@ fun AppScreen(
                                 onNavigateToBinding()
                             }
                         )
-                        DropdownMenuItem(
-                            text = { Text("使用说明") },
-                            onClick = {
-                                showMenu = false
-                                onNavigateToInstructions()
-                            }
-                        )
                     }
                 }
             )
@@ -149,6 +142,43 @@ fun AppScreen(
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
+            // Prominent Instructions Card at top
+            Card(
+                onClick = onNavigateToInstructions,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = "使用说明",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "使用说明",
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        Text(
+                            text = "首次使用请先完成权限设置，点击查看详情",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                        )
+                    }
+                    Text(
+                        text = "查看 >",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+
             if (!isServiceEnabled) {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
