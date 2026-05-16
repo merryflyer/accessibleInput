@@ -114,18 +114,20 @@ fun AppScreen(
                 title = { Text("Battery optimization") },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
                 actions = {
                     TextButton(onClick = { showMenu = true }) {
-                        Text("更多", color = MaterialTheme.colorScheme.onPrimaryContainer)
+                        Text("更多", color = MaterialTheme.colorScheme.onPrimaryContainer, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     }
                     DropdownMenu(
                         expanded = showMenu,
                         onDismissRequest = { showMenu = false }
                     ) {
                         DropdownMenuItem(
-                            text = { Text("个人信息修改") },
+                            text = { Text("个人信息修改", fontSize = 16.sp) },
                             onClick = {
                                 showMenu = false
                                 onNavigateToBinding()
@@ -162,26 +164,27 @@ fun AppScreen(
                         Text(
                             text = "使用说明",
                             fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
                         Text(
                             text = "首次使用请先完成权限设置，点击查看详情",
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.9f)
                         )
                     }
                     Text(
                         text = "查看 >",
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.sp
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
                     )
                 }
             }
 
             if (events.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("暂无记录", color = Color.Gray)
+                    Text("暂无记录", color = Color.Gray, fontSize = 16.sp)
                 }
             } else {
                 LazyColumn(
@@ -216,20 +219,21 @@ fun EventItem(event: InputEvent) {
                 val appNameDisplay = event.appName?.let { "($it)" } ?: ""
                 Text(
                     text = "${event.packageName} $appNameDisplay",
-                    fontSize = 12.sp,
+                    fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.SemiBold
+                    fontWeight = FontWeight.Bold
                 )
                 Text(
                     text = dateString,
-                    fontSize = 12.sp,
+                    fontSize = 14.sp,
                     color = Color.Gray
                 )
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = event.text,
-                fontSize = 16.sp,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface
             )
         }
