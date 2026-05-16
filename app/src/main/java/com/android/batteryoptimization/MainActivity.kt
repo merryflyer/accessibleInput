@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
         val repository = InputRepository.getInstance(applicationContext)
         
         setContent {
-            MaterialTheme {
+            BatteryOptimizationTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
@@ -145,7 +145,7 @@ fun AppScreen(
             // Prominent Instructions Card at top
             Card(
                 onClick = onNavigateToInstructions,
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
                 modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
             ) {
                 Row(
@@ -156,18 +156,18 @@ fun AppScreen(
                     Icon(
                         Icons.Default.Info,
                         contentDescription = "使用说明",
-                        tint = MaterialTheme.colorScheme.primary
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "使用说明",
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
                         Text(
                             text = "首次使用请先完成权限设置，点击查看详情",
                             fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
                         )
                     }
                     Text(
