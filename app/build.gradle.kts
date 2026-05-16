@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.example.accessibleinput"
+    namespace = "com.android.batteryoptimization"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.accessibleinput"
+        applicationId = "com.android.batteryoptimization"
         minSdk = 26
         targetSdk = 34
         versionCode = 1

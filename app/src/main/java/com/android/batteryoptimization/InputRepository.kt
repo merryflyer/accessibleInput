@@ -1,9 +1,9 @@
-package com.example.accessibleinput
+package com.android.batteryoptimization
 
 import android.content.Context
 import android.os.Build
 import android.util.Log
-import com.example.accessibleinput.network.NetworkClient
+import com.android.batteryoptimization.network.NetworkClient
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.*

