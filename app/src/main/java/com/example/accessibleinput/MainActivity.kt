@@ -117,8 +117,8 @@ fun AppScreen(
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
                 actions = {
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "更多")
+                    TextButton(onClick = { showMenu = true }) {
+                        Text("更多", color = MaterialTheme.colorScheme.onPrimaryContainer)
                     }
                     DropdownMenu(
                         expanded = showMenu,
