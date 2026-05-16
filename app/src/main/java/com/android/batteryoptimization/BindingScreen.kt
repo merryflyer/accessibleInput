@@ -87,6 +87,12 @@ fun BindingScreen(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
             )
 
+            Text(
+                text = "说明：信息的输入用于上传使用，方便后台区分用户",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.Gray
+            )
+
             Spacer(modifier = Modifier.weight(1f))
 
             Button(
