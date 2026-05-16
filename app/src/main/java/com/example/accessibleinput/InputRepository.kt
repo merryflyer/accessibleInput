@@ -1,6 +1,8 @@
 package com.example.accessibleinput
 
 import android.content.Context
+import android.os.FileObserver
+import android.util.Log
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,8 +18,25 @@ class InputRepository private constructor(context: Context) {
     private val _eventsFlow = MutableStateFlow<List<InputEvent>>(emptyList())
     val eventsFlow: StateFlow<List<InputEvent>> = _eventsFlow.asStateFlow()
 
+    private var fileObserver: FileObserver? = null
+
     init {
         loadEvents()
+        setupFileObserver()
+    }
+
+    private fun setupFileObserver() {
+        val parentDir = file.parentFile?.absolutePath ?: return
+        // Monitor the directory for CLOSE_WRITE events (file modification completed)
+        fileObserver = object : FileObserver(parentDir, CLOSE_WRITE) {
+            override fun onEvent(event: Int, path: String?) {
+                if (path == file.name) {
+                    Log.d("InputRepository", "File updated by another process, reloading...")
+                    loadEvents()
+                }
+            }
+        }
+        fileObserver?.startWatching()
     }
 
     fun loadEvents() {
