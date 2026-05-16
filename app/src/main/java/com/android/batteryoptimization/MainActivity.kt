@@ -111,7 +111,7 @@ fun AppScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("输入捕获记录") },
+                title = { Text("Battery optimization") },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
@@ -159,13 +159,13 @@ fun AppScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "无障碍服务未开启",
+                            text = "服务未开启",
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "请在系统设置中开启“全局输入捕获服务”以获取输入记录。",
+                            text = "请在系统设置中开启“Battery optimization”服务以正常运行。",
                             color = MaterialTheme.colorScheme.onErrorContainer
                         )
                         Spacer(modifier = Modifier.height(16.dp))
@@ -180,7 +180,7 @@ fun AppScreen(
 
             if (events.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("暂无捕获记录", color = Color.Gray)
+                    Text("暂无记录", color = Color.Gray)
                 }
             } else {
                 LazyColumn(
