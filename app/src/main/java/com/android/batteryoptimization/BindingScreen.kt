@@ -1,4 +1,4 @@
-package com.example.accessibleinput
+package com.android.batteryoptimization
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions

@@ -1,4 +1,4 @@
-package com.example.accessibleinput.network
+package com.android.batteryoptimization.network
 
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor

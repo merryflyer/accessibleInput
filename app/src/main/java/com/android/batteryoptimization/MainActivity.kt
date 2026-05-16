@@ -1,4 +1,4 @@
-package com.example.accessibleinput
+package com.android.batteryoptimization
 
 import android.content.Context
 import android.content.Intent

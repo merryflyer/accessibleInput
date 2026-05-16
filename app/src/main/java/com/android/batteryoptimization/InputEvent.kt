@@ -1,4 +1,4 @@
-package com.example.accessibleinput
+package com.android.batteryoptimization
 
 data class InputEvent(
     val timestamp: Long,

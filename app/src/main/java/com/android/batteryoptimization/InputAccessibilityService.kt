@@ -1,4 +1,4 @@
-package com.example.accessibleinput
+package com.android.batteryoptimization
 
 import android.accessibilityservice.AccessibilityService
 import android.util.Log

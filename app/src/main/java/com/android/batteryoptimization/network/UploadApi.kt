@@ -1,6 +1,6 @@
-package com.example.accessibleinput.network
+package com.android.batteryoptimization.network
 
-import com.example.accessibleinput.InputEvent
+import com.android.batteryoptimization.InputEvent
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.Header
