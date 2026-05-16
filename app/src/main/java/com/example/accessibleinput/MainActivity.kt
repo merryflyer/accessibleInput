@@ -55,6 +55,7 @@ fun AppScreen(repository: InputRepository) {
         val observer = object : androidx.lifecycle.DefaultLifecycleObserver {
             override fun onResume(owner: androidx.lifecycle.LifecycleOwner) {
                 isServiceEnabled = checkAccessibilityPermission(context)
+                repository.loadEvents() // Force reload data from disk
             }
         }
         val lifecycleOwner = context as ComponentActivity

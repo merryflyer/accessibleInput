@@ -1,17 +1,15 @@
 package com.example.accessibleinput
 
 import android.content.Context
-import android.content.SharedPreferences
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-
+import java.io.File
 class InputRepository private constructor(context: Context) {
 
-    private val sharedPreferences: SharedPreferences =
-        context.applicationContext.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+    private val file = File(context.applicationContext.filesDir, "events.json")
     private val gson = Gson()
 
     private val _eventsFlow = MutableStateFlow<List<InputEvent>>(emptyList())
@@ -21,8 +19,16 @@ class InputRepository private constructor(context: Context) {
         loadEvents()
     }
 
-    private fun loadEvents() {
-        val json = sharedPreferences.getString(KEY_EVENTS, null)
+    fun loadEvents() {
+        if (!file.exists()) {
+            _eventsFlow.value = emptyList()
+            return
+        }
+        val json = try {
+            file.readText()
+        } catch (e: Exception) {
+            null
+        }
         val events: List<InputEvent> = if (json != null) {
             val type = object : TypeToken<List<InputEvent>>() {}.type
             try {
@@ -52,13 +58,15 @@ class InputRepository private constructor(context: Context) {
     }
 
     private fun saveEvents(events: List<InputEvent>) {
-        val json = gson.toJson(events)
-        sharedPreferences.edit().putString(KEY_EVENTS, json).apply()
+        try {
+            val json = gson.toJson(events)
+            file.writeText(json)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     companion object {
-        private const val PREF_NAME = "accessible_input_prefs"
-        private const val KEY_EVENTS = "key_input_events"
 
         @Volatile
         private var instance: InputRepository? = null
