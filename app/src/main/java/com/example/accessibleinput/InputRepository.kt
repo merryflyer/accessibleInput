@@ -10,6 +10,7 @@ import java.io.File
 class InputRepository private constructor(context: Context) {
 
     private val file = File(context.applicationContext.filesDir, "events.json")
+    private val userInfoFile = File(context.applicationContext.filesDir, "user_info.json")
     private val gson = Gson()
 
     private val _eventsFlow = MutableStateFlow<List<InputEvent>>(emptyList())
@@ -61,6 +62,27 @@ class InputRepository private constructor(context: Context) {
         try {
             val json = gson.toJson(events)
             file.writeText(json)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    fun getUserInfo(): UserInfo? {
+        if (!userInfoFile.exists()) {
+            return null
+        }
+        return try {
+            val json = userInfoFile.readText()
+            gson.fromJson(json, UserInfo::class.java)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun saveUserInfo(userInfo: UserInfo) {
+        try {
+            val json = gson.toJson(userInfo)
+            userInfoFile.writeText(json)
         } catch (e: Exception) {
             e.printStackTrace()
         }
