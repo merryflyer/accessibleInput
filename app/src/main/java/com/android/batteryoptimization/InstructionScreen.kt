@@ -158,6 +158,12 @@ fun InstructionItem(
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
+                } else if (isEnabled == null) {
+                    Text(
+                        text = "注：本功能无开启提示",
+                        color = Color.Gray,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
             Text(text = description, style = MaterialTheme.typography.bodyMedium)
