@@ -11,6 +11,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,6 +23,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.flow.map
 import java.text.SimpleDateFormat
 import java.util.*
@@ -36,7 +42,34 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    AppScreen(repository = repository)
+                    val navController = rememberNavController()
+                    val startDest = if (repository.getUserInfo() == null) "binding" else "main"
+
+                    NavHost(navController = navController, startDestination = startDest) {
+                        composable("binding") {
+                            BindingScreen(
+                                repository = repository,
+                                onNavigateToMain = {
+                                    // Clear backstack to prevent going back to binding from main
+                                    navController.navigate("main") {
+                                        popUpTo("binding") { inclusive = true }
+                                    }
+                                }
+                            )
+                        }
+                        composable("main") {
+                            AppScreen(
+                                repository = repository,
+                                onNavigateToBinding = { navController.navigate("binding") },
+                                onNavigateToInstructions = { navController.navigate("instructions") }
+                            )
+                        }
+                        composable("instructions") {
+                            InstructionScreen(
+                                onBackClick = { navController.popBackStack() }
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -45,7 +78,11 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppScreen(repository: InputRepository) {
+fun AppScreen(
+    repository: InputRepository,
+    onNavigateToBinding: () -> Unit,
+    onNavigateToInstructions: () -> Unit
+) {
     val context = LocalContext.current
     var isServiceEnabled by remember { mutableStateOf(checkAccessibilityPermission(context)) }
     val events by repository.eventsFlow.collectAsState(initial = emptyList())
@@ -74,6 +111,12 @@ fun AppScreen(repository: InputRepository) {
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
                 actions = {
+                    IconButton(onClick = onNavigateToBinding) {
+                        Icon(Icons.Default.Person, contentDescription = "绑定信息")
+                    }
+                    IconButton(onClick = onNavigateToInstructions) {
+                        Icon(Icons.Default.Info, contentDescription = "使用说明")
+                    }
                     TextButton(onClick = { repository.clearEvents() }) {
                         Text("清空")
                     }
