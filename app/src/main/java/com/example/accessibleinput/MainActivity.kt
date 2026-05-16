@@ -212,8 +212,9 @@ fun EventItem(event: InputEvent) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                val appNameDisplay = event.appName?.let { "($it)" } ?: ""
                 Text(
-                    text = event.appName ?: event.packageName,
+                    text = "${event.packageName} $appNameDisplay",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold
