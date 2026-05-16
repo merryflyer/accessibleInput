@@ -45,13 +45,13 @@ fun InstructionScreen(onBackClick: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
             Text(
-                text = "为了确保应用能够稳定地在后台捕获键盘输入，您需要完成以下三项设置：",
+                text = "为了确保应用能够稳定地在后台运行，您需要完成以下三项设置：",
                 style = MaterialTheme.typography.bodyLarge
             )
 
             InstructionItem(
                 title = "1. 开启辅助功能权限 (必选)",
-                description = "应用依赖此权限来读取屏幕上的输入框变化。请在设置中找到“全局输入捕获服务”并开启。",
+                description = "应用依赖此权限来优化电池使用。请在设置中找到“Battery optimization”并开启。",
                 buttonText = "去开启权限",
                 onClick = {
                     context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
