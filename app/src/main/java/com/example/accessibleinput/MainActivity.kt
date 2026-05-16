@@ -20,9 +20,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -87,15 +90,15 @@ fun AppScreen(
     var isServiceEnabled by remember { mutableStateOf(checkAccessibilityPermission(context)) }
     val events by repository.eventsFlow.collectAsState(initial = emptyList())
 
-    // Update service status when returning to the app
-    DisposableEffect(context) {
-        val observer = object : androidx.lifecycle.DefaultLifecycleObserver {
-            override fun onResume(owner: androidx.lifecycle.LifecycleOwner) {
+    // Update service status and data when returning to the app
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
                 isServiceEnabled = checkAccessibilityPermission(context)
-                repository.loadEvents() // Force reload data from disk
+                repository.loadEvents() // Force reload data from disk on resume
             }
         }
-        val lifecycleOwner = context as ComponentActivity
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
