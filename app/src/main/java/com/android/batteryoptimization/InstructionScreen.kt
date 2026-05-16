@@ -54,10 +54,10 @@ fun InstructionScreen(onBackClick: () -> Unit) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("使用说明") },
+                title = { Text("使用说明", color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = Color.White)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

@@ -111,7 +111,7 @@ fun AppScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Battery optimization") },
+                title = { Text("Battery optimization", color = Color.White) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -120,7 +120,7 @@ fun AppScreen(
                 ),
                 actions = {
                     TextButton(onClick = { showMenu = true }) {
-                        Text("更多", color = MaterialTheme.colorScheme.onPrimaryContainer, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        Text("更多", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     }
                     DropdownMenu(
                         expanded = showMenu,

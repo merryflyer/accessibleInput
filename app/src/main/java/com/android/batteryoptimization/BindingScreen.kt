@@ -38,7 +38,7 @@ fun BindingScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("绑定用户信息") },
+                title = { Text("绑定用户信息", color = Color.White) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
