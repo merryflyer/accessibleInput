@@ -36,7 +36,6 @@
         <service
             android:name=".InputAccessibilityService"
             android:exported="true"
-            android:process=":accessibility"
             android:label="@string/accessibility_service_label"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
