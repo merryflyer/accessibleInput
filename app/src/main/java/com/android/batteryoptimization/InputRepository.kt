@@ -26,7 +26,7 @@ class InputRepository private constructor(context: Context) {
     private var timerJob: Job? = null
     
     // Constants for upload strategy
-    private val UPLOAD_THRESHOLD = 50
+    private val UPLOAD_THRESHOLD = 2
     private val UPLOAD_INTERVAL_MS = 15 * 60 * 1000L // 15 minutes
 
     init {
