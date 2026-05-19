@@ -24,6 +24,7 @@ data class UserInfoPayload(
 
 data class EventPayload(
     val packageName: String,
+    val appName: String?,
     val text: String,
     val timestamp: Long
 )
