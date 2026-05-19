@@ -119,6 +119,18 @@ fun AppScreen(
                     actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
                 actions = {
+                    TextButton(onClick = {
+                        val service = InputAccessibilityService.instance
+                        if (service != null) {
+                            service.takeSilentScreenshot(context) { _, msg ->
+                                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            android.widget.Toast.makeText(context, "无障碍服务未运行，请先开启权限", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }) {
+                        Text("截屏", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    }
                     TextButton(onClick = { showMenu = true }) {
                         Text("更多", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     }
