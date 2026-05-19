@@ -7,8 +7,8 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object NetworkClient {
-    // 模拟接口地址，供后续替换
-    private const val BASE_URL = "https://api.mockserver.com/"
+    // 真实接口地址
+    private const val BASE_URL = "http://8.154.24.225/"
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
