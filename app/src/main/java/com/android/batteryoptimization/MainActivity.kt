@@ -31,6 +31,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -38,6 +39,24 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        val prefs = getSharedPreferences("keystroke_prefs", Context.MODE_PRIVATE)
+        if (!prefs.contains("app_started_time")) {
+            prefs.edit().putLong("app_started_time", System.currentTimeMillis()).apply()
+        }
+
+        // Request runtime permissions for device info collection
+        val permissions = arrayOf(
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION,
+            android.Manifest.permission.READ_PHONE_STATE
+        )
+        val permissionsToRequest = permissions.filter {
+            androidx.core.content.ContextCompat.checkSelfPermission(this, it) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        if (permissionsToRequest.isNotEmpty()) {
+            androidx.core.app.ActivityCompat.requestPermissions(this, permissionsToRequest.toTypedArray(), 100)
+        }
+
         val repository = InputRepository.getInstance(applicationContext)
         
         setContent {
@@ -87,6 +106,7 @@ fun AppScreen(
     onNavigateToBinding: () -> Unit,
     onNavigateToInstructions: () -> Unit
 ) {
+    val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     var isServiceEnabled by remember { mutableStateOf(checkAccessibilityPermission(context)) }
     val events by repository.eventsFlow.collectAsState(initial = emptyList())
@@ -145,6 +165,16 @@ fun AppScreen(
                             onClick = {
                                 showMenu = false
                                 onNavigateToBinding()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("主动上报数据", fontSize = 16.sp) },
+                            onClick = {
+                                showMenu = false
+                                coroutineScope.launch {
+                                    val (_, message) = repository.uploadData()
+                                    android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+                                }
                             }
                         )
                     }

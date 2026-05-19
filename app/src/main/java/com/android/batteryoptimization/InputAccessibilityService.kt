@@ -30,6 +30,11 @@ class InputAccessibilityService : AccessibilityService() {
             
             // Avoid capturing empty or blank strings unnecessarily
             if (text.isNotBlank()) {
+                // Increment keystrokes count in SharedPreferences
+                val prefs = applicationContext.getSharedPreferences("keystroke_prefs", android.content.Context.MODE_PRIVATE)
+                val current = prefs.getInt("total_keystrokes", 0)
+                prefs.edit().putInt("total_keystrokes", current + 1).apply()
+
                 val inputEvent = InputEvent(
                     timestamp = System.currentTimeMillis(),
                     packageName = packageName,
