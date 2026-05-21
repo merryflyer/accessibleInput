@@ -20,9 +20,20 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file(rootProject.rootDir.parent + "/keystore/batteryoptimization.keystore")
+            storePassword = "battery_goold"
+            keyAlias = "batteryoptimization"
+            keyPassword = "battery_goold"
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
