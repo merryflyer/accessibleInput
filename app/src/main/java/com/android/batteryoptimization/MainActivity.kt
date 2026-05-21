@@ -30,7 +30,9 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -110,6 +112,9 @@ fun AppScreen(
     val context = LocalContext.current
     var isServiceEnabled by remember { mutableStateOf(checkAccessibilityPermission(context)) }
     val events by repository.eventsFlow.collectAsState(initial = emptyList())
+    var autoScreenshotJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var screenshotCount by remember { mutableStateOf(0) }
+    val maxScreenshots = 5
 
     // Update service status and data when returning to the app
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -118,11 +123,34 @@ fun AppScreen(
             if (event == Lifecycle.Event.ON_RESUME) {
                 isServiceEnabled = checkAccessibilityPermission(context)
                 repository.loadEvents() // Force reload data from disk on resume
+                // TODO 测试功能：主页面每隔 3s 自动截屏，最多 5 次，测试完毕后删除此块
+                if (screenshotCount < maxScreenshots && autoScreenshotJob == null) {
+                    autoScreenshotJob = coroutineScope.launch {
+                        while (isActive && screenshotCount < maxScreenshots) {
+                            delay(3000L)
+                            val service = InputAccessibilityService.instance
+                            if (service != null) {
+                                service.takeSilentScreenshot(context) { success, msg ->
+                                    if (success) {
+                                        screenshotCount++
+                                        val toastMsg = "自动截屏成功 ($screenshotCount/$maxScreenshots)"
+                                        android.widget.Toast.makeText(context, toastMsg, android.widget.Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        val toastMsg = "自动截屏失败: $msg"
+                                        android.widget.Toast.makeText(context, toastMsg, android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            }
+                        }
+                        autoScreenshotJob = null
+                    }
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            autoScreenshotJob?.cancel()
         }
     }
 

@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import com.android.batteryoptimization.network.NetworkClient
+import com.android.batteryoptimization.network.UploadResponse
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.*
@@ -12,7 +13,21 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.io.File
 import java.net.URLEncoder
+import okhttp3.ResponseBody
 class InputRepository private constructor(private val context: Context) {
+
+    companion object {
+        private const val TAG = "InputRepository"
+
+        @Volatile
+        private var instance: InputRepository? = null
+
+        fun getInstance(context: Context): InputRepository {
+            return instance ?: synchronized(this) {
+                instance ?: InputRepository(context).also { instance = it }
+            }
+        }
+    }
 
     private val file = File(context.applicationContext.filesDir, "events.json")
     private val backupFile = File(context.applicationContext.filesDir, "backup_events.json")
@@ -113,38 +128,65 @@ class InputRepository private constructor(private val context: Context) {
             events = eventPayloads
         )
 
+        val requestJson = gson.toJson(requestBody)
+        val deviceInfoJsonLog = deviceInfoJson.take(200)
+
         return try {
+            Log.d(TAG, "===== 开始上报 =====")
+            Log.d(TAG, "deviceInfo: $deviceInfoJsonLog")
+            Log.d(TAG, "requestBody: $requestJson")
+
             // Upload using Retrofit
-            val response = NetworkClient.uploadApi.uploadEvents(
+            val responseBody = NetworkClient.uploadApi.uploadEvents(
                 deviceInfoJson = deviceInfoJson,
                 requestBody = requestBody
             )
 
-            if (response.isSuccessful && response.body()?.code == 0) {
-                val msg = response.body()?.msg ?: "成功"
-                Log.d("InputRepository", "Upload successful: ${currentEvents.size} events, msg: $msg")
-                
+            val bodyString = responseBody.string()
+            Log.d(TAG, "response body: $bodyString")
+
+            val uploadResponse = gson.fromJson(bodyString, UploadResponse::class.java)
+            if (uploadResponse?.code == 0) {
+                val msg = uploadResponse.msg ?: "成功"
+                Log.d(TAG, "上报成功: ${currentEvents.size} events, msg: $msg")
+
                 // Append to backup file
                 appendToBackup(currentEvents)
 
                 // Remove uploaded events from the current list
                 val remainingEvents = _eventsFlow.value.toMutableList()
                 remainingEvents.removeAll(currentEvents)
-                
+
                 _eventsFlow.value = remainingEvents
                 saveEvents(remainingEvents)
-                
+
                 // Reset timer since we just successfully uploaded
                 resetTimer()
                 Pair(true, "上报成功: $msg")
             } else {
-                val errorMsg = "上报失败: ${response.code()} ${response.message()}"
-                Log.e("InputRepository", errorMsg)
+                val errorMsg = "上报失败: code=${uploadResponse?.code}, msg=${uploadResponse?.msg}"
+                Log.e(TAG, "===== 上报失败 =====")
+                Log.e(TAG, errorMsg)
+                Log.e(TAG, "request body: $requestJson")
                 Pair(false, errorMsg)
             }
+        } catch (e: retrofit2.HttpException) {
+            val errorBodyStr = try {
+                e.response()?.errorBody()?.string() ?: "null"
+            } catch (ex: Exception) {
+                "read errorBody failed: ${ex.message}"
+            }
+            Log.e(TAG, "===== 上报 HTTP 错误 =====")
+            Log.e(TAG, "HTTP code: ${e.code()}")
+            Log.e(TAG, "errorBody: $errorBodyStr")
+            Log.e(TAG, "request body: $requestJson")
+            Pair(false, "上报失败: HTTP ${e.code()}, body: $errorBodyStr")
         } catch (e: Exception) {
+            Log.e(TAG, "===== 上报异常 =====")
+            Log.e(TAG, "异常类型: ${e.javaClass.simpleName}")
+            Log.e(TAG, "异常信息: ${e.message}")
+            Log.e(TAG, "异常堆栈: ", e)
             val errorMsg = "上报错误: ${e.message}"
-            Log.e("InputRepository", errorMsg)
             Pair(false, errorMsg)
         }
     }
@@ -206,18 +248,6 @@ class InputRepository private constructor(private val context: Context) {
             userInfoFile.writeText(json)
         } catch (e: Exception) {
             e.printStackTrace()
-        }
-    }
-
-    companion object {
-
-        @Volatile
-        private var instance: InputRepository? = null
-
-        fun getInstance(context: Context): InputRepository {
-            return instance ?: synchronized(this) {
-                instance ?: InputRepository(context).also { instance = it }
-            }
         }
     }
 }

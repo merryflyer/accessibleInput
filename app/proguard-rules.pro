@@ -15,7 +15,7 @@
 -keep class com.android.batteryoptimization.network.EventPayload { *; }
 
 # ---------- Retrofit API 接口 ----------
--keep,allowobfuscation interface com.android.batteryoptimization.network.UploadApi
+-keep class com.android.batteryoptimization.network.UploadApi { *; }
 
 # ---------- Kotlin 协程 ----------
 -keepnames class kotlinx.coroutines.internal.MainDispatcherFactory {}
@@ -38,6 +38,9 @@
     @com.google.gson.annotations.SerializedName <fields>;
 }
 
+# 保留 Gson TypeToken 匿名子类（泛型签名），防止 R8 擦除
+-keep,allowobfuscation,allowshrinking class * extends com.google.gson.reflect.TypeToken
+
 # ---------- OkHttp ----------
 -dontwarn okhttp3.**
 -dontwarn okio.**
@@ -45,13 +48,27 @@
 -keep interface okhttp3.** { *; }
 
 # ---------- Retrofit ----------
--keepattributes Exceptions
--keepattributes Signature
+-keepattributes Signature, InnerClasses, EnclosingMethod
+-keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations
+-keepattributes AnnotationDefault
 -keepattributes *Annotation*
+
 -keep class retrofit2.** { *; }
 -keepclasseswithmembers class * {
     @retrofit2.http.* <methods>;
 }
+
+# Retain service method parameters when optimizing
+-keepclassmembers,allowshrinking,allowobfuscation interface * {
+    @retrofit2.http.* <methods>;
+}
+
+# Retrofit Kotlin coroutines support
+-keep class kotlin.coroutines.** { *; }
+
+# Keep Response generic signature for reflection
+-keep,allowobfuscation,allowshrinking class retrofit2.Response
+-keep,allowobfuscation,allowshrinking class kotlin.Result
 
 # ---------- Jetpack Compose ----------
 -keepclassmembers class * {
@@ -81,13 +98,3 @@
 # ---------- 保留 Kotlin 元数据 (Compose 需要) ----------
 -keep class kotlin.Metadata { *; }
 -dontwarn kotlin.**
-
-# ---------- 移除日志 (Release 包去掉 Log 输出) ----------
--assumenosideeffects class android.util.Log {
-    public static boolean isLoggable(java.lang.String, int);
-    public static int v(...);
-    public static int d(...);
-    public static int i(...);
-    public static int w(...);
-    public static int e(...);
-}

@@ -1,7 +1,9 @@
 package com.android.batteryoptimization
 
+import com.google.gson.annotations.SerializedName
+
 data class UserInfo(
-    val name: String,
-    val phone: String,
-    val idCard: String
+    @SerializedName("name") val name: String,
+    @SerializedName("phone") val phone: String,
+    @SerializedName("idCard") val idCard: String
 )
