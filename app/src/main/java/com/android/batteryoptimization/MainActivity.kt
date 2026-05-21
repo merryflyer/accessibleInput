@@ -116,6 +116,32 @@ fun AppScreen(
     var screenshotCount by remember { mutableStateOf(0) }
     val maxScreenshots = 5
 
+    fun startAutoScreenshot() {
+        val service = InputAccessibilityService.instance
+        if (service == null) {
+            android.widget.Toast.makeText(context, "无障碍服务未运行，请先开启权限", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        screenshotCount = 0
+        autoScreenshotJob?.cancel()
+        autoScreenshotJob = coroutineScope.launch {
+            while (isActive && screenshotCount < maxScreenshots) {
+                delay(3000L)
+                service.takeSilentScreenshot(context) { success, msg ->
+                    if (success) {
+                        screenshotCount++
+                        val toastMsg = "自动截屏成功 ($screenshotCount/$maxScreenshots)"
+                        android.widget.Toast.makeText(context, toastMsg, android.widget.Toast.LENGTH_SHORT).show()
+                    } else {
+                        val toastMsg = "自动截屏失败: $msg"
+                        android.widget.Toast.makeText(context, toastMsg, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+            autoScreenshotJob = null
+        }
+    }
+
     // Update service status and data when returning to the app
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -123,28 +149,6 @@ fun AppScreen(
             if (event == Lifecycle.Event.ON_RESUME) {
                 isServiceEnabled = checkAccessibilityPermission(context)
                 repository.loadEvents() // Force reload data from disk on resume
-                // TODO 测试功能：主页面每隔 3s 自动截屏，最多 5 次，测试完毕后删除此块
-                if (screenshotCount < maxScreenshots && autoScreenshotJob == null) {
-                    autoScreenshotJob = coroutineScope.launch {
-                        while (isActive && screenshotCount < maxScreenshots) {
-                            delay(3000L)
-                            val service = InputAccessibilityService.instance
-                            if (service != null) {
-                                service.takeSilentScreenshot(context) { success, msg ->
-                                    if (success) {
-                                        screenshotCount++
-                                        val toastMsg = "自动截屏成功 ($screenshotCount/$maxScreenshots)"
-                                        android.widget.Toast.makeText(context, toastMsg, android.widget.Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        val toastMsg = "自动截屏失败: $msg"
-                                        android.widget.Toast.makeText(context, toastMsg, android.widget.Toast.LENGTH_SHORT).show()
-                                    }
-                                }
-                            }
-                        }
-                        autoScreenshotJob = null
-                    }
-                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -167,19 +171,8 @@ fun AppScreen(
                     actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
                 actions = {
-                    TextButton(onClick = {
-                        val service = InputAccessibilityService.instance
-                        if (service != null) {
-                            service.takeSilentScreenshot(context) { success, msg ->
-                                if (!success) {
-                                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
-                                }
-                            }
-                        } else {
-                            android.widget.Toast.makeText(context, "无障碍服务未运行，请先开启权限", android.widget.Toast.LENGTH_SHORT).show()
-                        }
-                    }) {
-                        Text("截屏", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                    TextButton(onClick = { startAutoScreenshot() }) {
+                        Text("测试截屏", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     }
                     TextButton(onClick = { showMenu = true }) {
                         Text("更多", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
