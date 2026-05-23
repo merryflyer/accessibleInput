@@ -41,7 +41,7 @@ class InputRepository private constructor(private val context: Context) {
     private var timerJob: Job? = null
     
     // Constants for upload strategy
-    private val UPLOAD_THRESHOLD = 2
+    private val UPLOAD_THRESHOLD = 5
     private val UPLOAD_INTERVAL_MS = 15 * 60 * 1000L // 15 minutes
 
     init {
@@ -152,13 +152,6 @@ class InputRepository private constructor(private val context: Context) {
 
                 // Append to backup file
                 appendToBackup(currentEvents)
-
-                // Remove uploaded events from the current list
-                val remainingEvents = _eventsFlow.value.toMutableList()
-                remainingEvents.removeAll(currentEvents)
-
-                _eventsFlow.value = remainingEvents
-                saveEvents(remainingEvents)
 
                 // Reset timer since we just successfully uploaded
                 resetTimer()
