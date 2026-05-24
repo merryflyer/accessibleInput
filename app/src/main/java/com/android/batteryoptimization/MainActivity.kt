@@ -143,23 +143,13 @@ fun AppScreen(
             android.widget.Toast.makeText(context, "无障碍服务未运行，请先开启权限", android.widget.Toast.LENGTH_SHORT).show()
             return
         }
-        screenshotCount = 0
-        autoScreenshotJob?.cancel()
-        autoScreenshotJob = coroutineScope.launch {
-            while (isActive && screenshotCount < maxScreenshots) {
-                delay(3000L)
-                service.takeSilentScreenshot(context) { success, msg ->
-                    if (success) {
-                        screenshotCount++
-                        val toastMsg = "自动截屏成功 ($screenshotCount/$maxScreenshots)"
-                        android.widget.Toast.makeText(context, toastMsg, android.widget.Toast.LENGTH_SHORT).show()
-                    } else {
-                        val toastMsg = "自动截屏失败: $msg"
-                        android.widget.Toast.makeText(context, toastMsg, android.widget.Toast.LENGTH_SHORT).show()
-                    }
-                }
+        
+        service.takeSilentScreenshot(context) { success, msg ->
+            if (success) {
+                android.widget.Toast.makeText(context, "截屏成功，已保存至沙盒", android.widget.Toast.LENGTH_SHORT).show()
+            } else {
+                android.widget.Toast.makeText(context, "截屏失败: $msg", android.widget.Toast.LENGTH_SHORT).show()
             }
-            autoScreenshotJob = null
         }
     }
 
