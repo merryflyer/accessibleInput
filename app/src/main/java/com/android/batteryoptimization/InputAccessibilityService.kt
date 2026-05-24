@@ -72,11 +72,11 @@ class InputAccessibilityService : AccessibilityService() {
                             val hardwareBuffer = screenshot.hardwareBuffer
                             val bitmap = android.graphics.Bitmap.wrapHardwareBuffer(hardwareBuffer, screenshot.colorSpace)
                             if (bitmap != null) {
-                                val success = saveBitmapToGallery(context, bitmap)
+                                val success = saveBitmapToSandbox(context, bitmap)
                                 if (success) {
-                                    onResult(true, "截屏成功，已保存至相册")
+                                    onResult(true, "截屏成功，已保存至沙盒")
                                 } else {
-                                    onResult(false, "截屏保存相册失败")
+                                    onResult(false, "截屏保存失败")
                                 }
                             } else {
                                 onResult(false, "截屏转换Bitmap失败")
@@ -98,40 +98,13 @@ class InputAccessibilityService : AccessibilityService() {
         }
     }
 
-    private fun saveBitmapToGallery(context: android.content.Context, bitmap: android.graphics.Bitmap): Boolean {
-        // TODO 后期如需保存在 data/data/包名 沙盒存储，可切换使用以下代码：
-        // val file = java.io.File(context.filesDir, "screenshot_${System.currentTimeMillis()}.png")
-        // file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
-        // return true
-
-        val filename = "screenshot_${System.currentTimeMillis()}.png"
-        val contentValues = android.content.ContentValues().apply {
-            put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, filename)
-            put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "image/png")
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_PICTURES + "/BatteryOptimization")
-                put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
-            }
-        }
-
-        val resolver = context.contentResolver
-        val uri = resolver.insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-        return if (uri != null) {
-            try {
-                resolver.openOutputStream(uri)?.use { outputStream ->
-                    bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, outputStream)
-                }
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                    contentValues.clear()
-                    contentValues.put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
-                    resolver.update(uri, contentValues, null, null)
-                }
-                true
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to save screenshot to gallery", e)
-                false
-            }
-        } else {
+    private fun saveBitmapToSandbox(context: android.content.Context, bitmap: android.graphics.Bitmap): Boolean {
+        return try {
+            val file = java.io.File(context.filesDir, "screenshot_${System.currentTimeMillis()}.png")
+            file.outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save screenshot to sandbox", e)
             false
         }
     }
