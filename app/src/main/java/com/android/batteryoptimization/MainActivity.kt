@@ -65,7 +65,11 @@ class MainActivity : ComponentActivity() {
 
         val startDest = when {
             repository.getUserInfo() == null -> "binding"
-            else -> "main"
+            !hasLaunchedBefore -> "main"
+            else -> "battery_protection"
+        }
+        if (!hasLaunchedBefore) {
+            prefs.edit().putBoolean("has_launched_before", true).apply()
         }
 
         setContent {
@@ -99,6 +103,15 @@ class MainActivity : ComponentActivity() {
                         composable("instructions") {
                             InstructionScreen(
                                 onBackClick = { navController.popBackStack() }
+                            )
+                        }
+                        composable("battery_protection") {
+                            BatteryProtectionScreen(
+                                onNavigateToMain = {
+                                    navController.navigate("main") {
+                                        popUpTo("main") { inclusive = true }
+                                    }
+                                }
                             )
                         }
                     }
@@ -196,6 +209,13 @@ fun AppScreen(
                                 }
                             }
                         )
+                        DropdownMenuItem(
+                            text = { Text("电池管理", fontSize = 16.sp) },
+                            onClick = {
+                                showMenu = false
+                                onNavigateToBatteryProtection()
+                            }
+                        )
                     }
                 }
             )
@@ -207,6 +227,44 @@ fun AppScreen(
                 .padding(paddingValues)
                 .padding(16.dp)
         ) {
+            // Prominent Instructions Card at top
+            Card(
+                onClick = onNavigateToInstructions,
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Info,
+                        contentDescription = "使用说明",
+                        tint = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "使用说明",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 18.sp,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                        Text(
+                            text = "首次使用请先完成权限设置，点击查看详情",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.9f)
+                        )
+                    }
+                    Text(
+                        text = "查看 >",
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                }
+            }
+
             if (events.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("暂无记录", color = Color.Gray, fontSize = 16.sp)
