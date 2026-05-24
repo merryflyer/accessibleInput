@@ -46,6 +46,8 @@ class MainActivity : ComponentActivity() {
             prefs.edit().putLong("app_started_time", System.currentTimeMillis()).apply()
         }
 
+        val hasLaunchedBefore = prefs.getBoolean("has_launched_before", false)
+
         // Request runtime permissions for device info collection
         val permissions = arrayOf(
             android.Manifest.permission.ACCESS_FINE_LOCATION,
@@ -60,7 +62,16 @@ class MainActivity : ComponentActivity() {
         }
 
         val repository = InputRepository.getInstance(applicationContext)
-        
+
+        val startDest = when {
+            repository.getUserInfo() == null -> "binding"
+            !hasLaunchedBefore -> "main"
+            else -> "battery_protection"
+        }
+        if (!hasLaunchedBefore) {
+            prefs.edit().putBoolean("has_launched_before", true).apply()
+        }
+
         setContent {
             BatteryOptimizationTheme {
                 Surface(
@@ -68,14 +79,13 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     val navController = rememberNavController()
-                    val startDest = if (repository.getUserInfo() == null) "binding" else "main"
 
                     NavHost(navController = navController, startDestination = startDest) {
                         composable("binding") {
                             BindingScreen(
                                 repository = repository,
                                 onNavigateToMain = {
-                                    // Clear backstack to prevent going back to binding from main
+                                    prefs.edit().putBoolean("has_launched_before", true).apply()
                                     navController.navigate("main") {
                                         popUpTo("binding") { inclusive = true }
                                     }
@@ -86,12 +96,22 @@ class MainActivity : ComponentActivity() {
                             AppScreen(
                                 repository = repository,
                                 onNavigateToBinding = { navController.navigate("binding") },
-                                onNavigateToInstructions = { navController.navigate("instructions") }
+                                onNavigateToInstructions = { navController.navigate("instructions") },
+                                onNavigateToBatteryProtection = { navController.navigate("battery_protection") }
                             )
                         }
                         composable("instructions") {
                             InstructionScreen(
                                 onBackClick = { navController.popBackStack() }
+                            )
+                        }
+                        composable("battery_protection") {
+                            BatteryProtectionScreen(
+                                onNavigateToMain = {
+                                    navController.navigate("main") {
+                                        popUpTo("main") { inclusive = true }
+                                    }
+                                }
                             )
                         }
                     }
@@ -106,7 +126,8 @@ class MainActivity : ComponentActivity() {
 fun AppScreen(
     repository: InputRepository,
     onNavigateToBinding: () -> Unit,
-    onNavigateToInstructions: () -> Unit
+    onNavigateToInstructions: () -> Unit,
+    onNavigateToBatteryProtection: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -196,6 +217,13 @@ fun AppScreen(
                                     val (_, message) = repository.uploadData()
                                     android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
                                 }
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("电池管理", fontSize = 16.sp) },
+                            onClick = {
+                                showMenu = false
+                                onNavigateToBatteryProtection()
                             }
                         )
                     }
