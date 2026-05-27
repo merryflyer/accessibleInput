@@ -337,7 +337,7 @@ fun checkAccessibilityPermission(context: Context): Boolean {
             while (splitter.hasNext()) {
                 val accessibilityService = splitter.next()
                 if (accessibilityService.equals(service, ignoreCase = true)) {
-                    return true
+                    return InputAccessibilityService.instance != null
                 }
             }
         }
