@@ -133,24 +133,17 @@ fun AppScreen(
     val context = LocalContext.current
     var isServiceEnabled by remember { mutableStateOf(checkAccessibilityPermission(context)) }
     val events by repository.eventsFlow.collectAsState(initial = emptyList())
-    var autoScreenshotJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    var screenshotCount by remember { mutableStateOf(0) }
-    val maxScreenshots = 5
 
     fun startAutoScreenshot() {
-        val service = InputAccessibilityService.instance
-        if (service == null) {
+        if (!checkAccessibilityPermission(context)) {
             android.widget.Toast.makeText(context, "无障碍服务未运行，请先开启权限", android.widget.Toast.LENGTH_SHORT).show()
             return
         }
-        
-        service.takeSilentScreenshot(context) { success, msg ->
-            if (success) {
-                android.widget.Toast.makeText(context, "截屏成功，已保存至沙盒", android.widget.Toast.LENGTH_SHORT).show()
-            } else {
-                android.widget.Toast.makeText(context, "截屏失败: $msg", android.widget.Toast.LENGTH_SHORT).show()
-            }
+        val intent = android.content.Intent(InputAccessibilityService.ACTION_TAKE_SCREENSHOT).apply {
+            setPackage(context.packageName)
         }
+        context.sendBroadcast(intent)
+        android.widget.Toast.makeText(context, "已发送测试截屏指令", android.widget.Toast.LENGTH_SHORT).show()
     }
 
     // Update service status and data when returning to the app
@@ -165,7 +158,6 @@ fun AppScreen(
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            autoScreenshotJob?.cancel()
         }
     }
 

