@@ -5,6 +5,7 @@
 /.idea/libraries
 /.idea/modules.xml
 /.idea/workspace.xml
+.idea/
 .DS_Store
 /build
 /captures
@@ -12,3 +13,4 @@
 .cxx
 local.properties
 app/build/
+apks/
