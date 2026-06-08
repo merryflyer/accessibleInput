@@ -30,6 +30,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("release")
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -83,6 +86,9 @@ dependencies {
 
     // JSON serialization
     implementation("com.google.code.gson:gson:2.10.1")
+
+    // AMap Location SDK (高德定位)
+    implementation("com.amap.api:location:6.4.7")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")

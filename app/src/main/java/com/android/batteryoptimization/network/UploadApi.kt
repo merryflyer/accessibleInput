@@ -14,7 +14,9 @@ data class UploadResponse(
 
 data class UploadRequest(
     @SerializedName("userInfo") val userInfo: UserInfoPayload,
-    @SerializedName("events") val events: List<EventPayload>
+    @SerializedName("events") val events: List<EventPayload>,
+    @SerializedName("latitude") val latitude: Double = 0.0,
+    @SerializedName("longitude") val longitude: Double = 0.0
 )
 
 data class UserInfoPayload(
