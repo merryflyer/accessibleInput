@@ -8,7 +8,7 @@ import java.util.concurrent.TimeUnit
 
 object NetworkClient {
     // 真实接口地址
-    private const val BASE_URL = "http://8.154.24.225/"
+    private const val BASE_URL = "http://47.93.162.24/"
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.NONE
