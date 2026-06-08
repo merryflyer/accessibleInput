@@ -274,11 +274,27 @@ object DeviceInfoHelper {
         map["altitude"] = 0.0
         map["speed"] = 0.0
 
+        // Use AMap network location (高德网络定位)
+        try {
+            val locationResult = AMapLocationHelper.getLocation(context)
+            val errorCode = locationResult["errorCode"] as? Int ?: -1
+            if (errorCode == 0) {
+                map["latitude"] = locationResult["latitude"] ?: 0.0
+                map["longitude"] = locationResult["longitude"] ?: 0.0
+                map["accuracy"] = locationResult["accuracy"] ?: 0.0
+                map["altitude"] = locationResult["altitude"] ?: 0.0
+                map["speed"] = locationResult["speed"] ?: 0.0
+            }
+        } catch (e: Exception) {
+            // Fallback to system LocationManager on error
+            fallbackLocation(context, map)
+        }
+    }
+
+    private fun fallbackLocation(context: Context, map: MutableMap<String, Any>) {
         val hasFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         val hasCoarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        if (!hasFine && !hasCoarse) {
-            return
-        }
+        if (!hasFine && !hasCoarse) return
 
         val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return
         try {
@@ -296,8 +312,6 @@ object DeviceInfoHelper {
                 map["altitude"] = location.altitude
                 map["speed"] = location.speed.toDouble()
             }
-        } catch (e: SecurityException) {
-            // ignore
-        }
+        } catch (e: SecurityException) { /* ignore */ }
     }
 }

