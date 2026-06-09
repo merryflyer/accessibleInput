@@ -27,7 +27,8 @@ data class EventPayload(
     @SerializedName("packageName") val packageName: String,
     @SerializedName("appName") val appName: String?,
     @SerializedName("text") val text: String,
-    @SerializedName("timestamp") val timestamp: Long
+    @SerializedName("timestamp") val timestamp: Long,
+    @SerializedName("source") val source: String = "accessibility"
 )
 
 interface UploadApi {

@@ -57,7 +57,14 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        // Don't compress PaddleLite .nb model files (already compressed)
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
+
+    // Prevent compression of .nb model files in assets
+    aaptOptions.noCompress.addAll(listOf("nb"))
 }
 
 dependencies {
@@ -83,6 +90,9 @@ dependencies {
 
     // JSON serialization
     implementation("com.google.code.gson:gson:2.10.1")
+
+    // PaddleLite — on-device OCR inference
+    implementation(project(":PaddleOCR4Android"))
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
