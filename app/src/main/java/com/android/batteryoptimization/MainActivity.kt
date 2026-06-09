@@ -12,6 +12,7 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -170,6 +171,13 @@ fun AppScreen(
     }
 
     var showMenu by remember { mutableStateOf(false) }
+    var showIntervalDialog by remember { mutableStateOf(false) }
+
+    // 当前截屏间隔（从 SharedPreferences 读取，默认 10s）
+    val intervalPrefs = context.getSharedPreferences("keystroke_prefs", android.content.Context.MODE_PRIVATE)
+    var currentIntervalMs by remember { mutableLongStateOf(
+        intervalPrefs.getLong(InputAccessibilityService.KEY_SCREENSHOT_INTERVAL, InputAccessibilityService.DEFAULT_SCREENSHOT_INTERVAL_MS)
+    ) }
 
     // ── OCR 引擎（独立于服务，提前加载） ─────────────────────────
     val standaloneEngine = remember { OcrEngine(context) }
@@ -285,6 +293,13 @@ fun AppScreen(
                                 onNavigateToBatteryProtection()
                             }
                         )
+                        DropdownMenuItem(
+                            text = { Text("自动截屏间隔", fontSize = 16.sp) },
+                            onClick = {
+                                showMenu = false
+                                showIntervalDialog = true
+                            }
+                        )
                     }
                 }
             )
@@ -393,6 +408,60 @@ fun AppScreen(
             confirmButton = {
                 TextButton(onClick = { ocrTestResult = null }) {
                     Text("关闭")
+                }
+            }
+        )
+    }
+
+    // ── 自动截屏间隔设置对话框 ────────────────────────────────────
+    if (showIntervalDialog) {
+        val options = listOf(
+            5000L to "5 秒",
+            10000L to "10 秒",
+            15000L to "15 秒",
+            30000L to "30 秒",
+            60000L to "60 秒"
+        )
+        AlertDialog(
+            onDismissRequest = { showIntervalDialog = false },
+            title = { Text("自动截屏间隔", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("每次输入时，距上次截屏超过此间隔则自动截屏+OCR")
+                    Spacer(Modifier.height(12.dp))
+                    options.forEach { (ms, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    currentIntervalMs = ms
+                                    intervalPrefs.edit().putLong(
+                                        InputAccessibilityService.KEY_SCREENSHOT_INTERVAL, ms
+                                    ).apply()
+                                    showIntervalDialog = false
+                                }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = currentIntervalMs == ms,
+                                onClick = {
+                                    currentIntervalMs = ms
+                                    intervalPrefs.edit().putLong(
+                                        InputAccessibilityService.KEY_SCREENSHOT_INTERVAL, ms
+                                    ).apply()
+                                    showIntervalDialog = false
+                                }
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(label, fontSize = 16.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showIntervalDialog = false }) {
+                    Text("取消")
                 }
             }
         )

