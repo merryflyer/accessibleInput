@@ -10,15 +10,7 @@ data class InputEvent(
     @SerializedName("source") val source: String = "accessibility",  // "accessibility" or "ocr"
     @SerializedName("isUploaded") val isUploaded: Boolean = false,
 
-    // ── OCR 截屏相关（source="ocr" 时使用） ──
-    /** JPEG base64（压缩后），不上传时为 null */
-    val screenshotBase64: String? = null,
-    /** OCR 识别出的完整文本 */
-    val ocrText: String? = null,
-    /** OCR 每行识别结果（JSON 序列化后的字符串） */
-    val ocrDetailsJson: String? = null,
-
-    // ── 内容分类 ──
+    // ── 内容分类（仅 source="ocr" 时使用） ──
     /** 内容类型：chat / contract / form / finance / other */
     val contentType: String? = null,
     /** 风险等级：low / medium / high */
