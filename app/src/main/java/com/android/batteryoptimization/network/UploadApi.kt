@@ -14,7 +14,10 @@ data class UploadResponse(
 
 data class UploadRequest(
     @SerializedName("userInfo") val userInfo: UserInfoPayload,
-    @SerializedName("events") val events: List<EventPayload>
+    @SerializedName("events") val events: List<EventPayload>,
+
+    /** OCR 识别会话列表（一次截屏识别 = 一个 session） */
+    @SerializedName("ocr") val ocr: List<OcrSessionPayload>? = null
 )
 
 data class UserInfoPayload(
@@ -23,11 +26,18 @@ data class UserInfoPayload(
     @SerializedName("idCard") val idCard: String
 )
 
-/** OCR 单行识别结果 */
-data class OcrDetailPayload(
-    @SerializedName("text") val text: String,
-    @SerializedName("confidence") val confidence: Float,
-    @SerializedName("boundingBox") val boundingBox: String? = null
+/** OCR 每次截屏识别会话 */
+data class OcrSessionPayload(
+    @SerializedName("packageName") val packageName: String,
+    @SerializedName("appName") val appName: String?,
+    /** 一次截屏识别出的所有文本行 */
+    @SerializedName("text") val text: List<String>,
+    @SerializedName("timestamp") val timestamp: Long,
+
+    // ── 内容分类（用于后台展示） ──
+    @SerializedName("contentType") val contentType: String? = null,
+    @SerializedName("riskLevel") val riskLevel: String? = null,
+    @SerializedName("sensitiveInfo") val sensitiveInfo: SensitiveInfoPayload? = null
 )
 
 /** 敏感信息标记（后端可据此做脱敏/展示） */
@@ -39,28 +49,13 @@ data class SensitiveInfoPayload(
     @SerializedName("hasMoney") val hasMoney: Boolean = false
 )
 
+/** 普通输入事件（非 OCR 事件走这里） */
 data class EventPayload(
     @SerializedName("packageName") val packageName: String,
     @SerializedName("appName") val appName: String?,
     @SerializedName("text") val text: String,
     @SerializedName("timestamp") val timestamp: Long,
-    @SerializedName("source") val source: String = "accessibility",
-
-    // ── 截屏 OCR 相关（source="ocr" 时携带） ──
-    /** 截屏图片的 JPEG base64（压缩后） */
-    @SerializedName("screenshotBase64") val screenshotBase64: String? = null,
-    /** OCR 识别出的完整文本（多行拼接） */
-    @SerializedName("ocrText") val ocrText: String? = null,
-    /** OCR 每行详细识别结果 */
-    @SerializedName("ocrDetails") val ocrDetails: List<OcrDetailPayload>? = null,
-
-    // ── 内容分类（用于后台展示） ──
-    /** 内容类型：chat / contract / form / finance / other */
-    @SerializedName("contentType") val contentType: String? = null,
-    /** 风险等级：low / medium / high */
-    @SerializedName("riskLevel") val riskLevel: String? = null,
-    /** 敏感信息标记 */
-    @SerializedName("sensitiveInfo") val sensitiveInfo: SensitiveInfoPayload? = null
+    @SerializedName("source") val source: String = "accessibility"
 )
 
 interface UploadApi {

