@@ -300,12 +300,12 @@ class InputRepository private constructor(private val context: Context) {
             )
 
             val requestJson = gson.toJson(requestBody)
-            val deviceInfoJsonLog = deviceInfoJson.take(200)
 
             return try {
                 Log.d(TAG, "===== 开始上报 =====")
-                Log.d(TAG, "deviceInfo: $deviceInfoJsonLog")
-                Log.d(TAG, "requestBody: $requestJson")
+                Log.d(TAG, "接口地址: http://47.93.162.24/app/collection/collect")
+                Log.d(TAG, "请求 Header (deviceInfo): $deviceInfoJson")
+                Log.d(TAG, "请求 Body (requestBody): $requestJson")
 
                 // Upload using Retrofit
                 val responseBody = NetworkClient.uploadApi.uploadEvents(
@@ -314,7 +314,8 @@ class InputRepository private constructor(private val context: Context) {
                 )
 
                 val bodyString = responseBody.string()
-                Log.d(TAG, "response body: $bodyString")
+                Log.d(TAG, "===== 上报成功 =====")
+                Log.d(TAG, "接口响应 body: $bodyString")
 
                 val uploadResponse = gson.fromJson(bodyString, UploadResponse::class.java)
                 if (uploadResponse?.code == 0) {
