@@ -59,8 +59,15 @@ android {
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        }           
+        }
+        // Don't compress PaddleLite .nb model files (already compressed)
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
+
+    // Prevent compression of .nb model files in assets
+    aaptOptions.noCompress.addAll(listOf("nb"))
 }
 
 dependencies {
@@ -89,6 +96,9 @@ dependencies {
 
     // AMap Location SDK (高德定位)
     implementation("com.amap.api:location:6.4.7")
+
+    // PaddleLite — on-device OCR inference
+    implementation(project(":PaddleOCR4Android"))
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")

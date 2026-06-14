@@ -95,7 +95,7 @@
     volatile <fields>;
 }
 
-# ---------- 保留 Kotlin 元数据 (Compose 需要) ----------
+# ---------- Kotlin 元数据 (Compose 需要) ----------
 -keep class kotlin.Metadata { *; }
 -dontwarn kotlin.**
 
@@ -104,3 +104,11 @@
 -keep class com.autonavi.** { *; }
 -dontwarn com.amap.api.**
 -dontwarn com.autonavi.**
+
+# ---------- PaddleLite ----------
+-keep class com.baidu.paddle.lite.** { *; }
+-dontwarn com.baidu.paddle.lite.**
+
+# ---------- OCR data classes ----------
+-keep class com.android.batteryoptimization.ocr.OcrResult { *; }
+-keep class com.android.batteryoptimization.ocr.OcrEngine { *; }

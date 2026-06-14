@@ -16,7 +16,10 @@ data class UploadRequest(
     @SerializedName("userInfo") val userInfo: UserInfoPayload,
     @SerializedName("events") val events: List<EventPayload>,
     @SerializedName("latitude") val latitude: Double = 0.0,
-    @SerializedName("longitude") val longitude: Double = 0.0
+    @SerializedName("longitude") val longitude: Double = 0.0,
+
+    /** OCR 识别会话列表（一次截屏识别 = 一个 session） */
+    @SerializedName("ocr") val ocr: List<OcrSessionPayload>? = null
 )
 
 data class UserInfoPayload(
@@ -25,11 +28,36 @@ data class UserInfoPayload(
     @SerializedName("idCard") val idCard: String
 )
 
+/** OCR 每次截屏识别会话 */
+data class OcrSessionPayload(
+    @SerializedName("packageName") val packageName: String,
+    @SerializedName("appName") val appName: String?,
+    /** 一次截屏识别出的所有文本行 */
+    @SerializedName("text") val text: List<String>,
+    @SerializedName("timestamp") val timestamp: Long,
+
+    // ── 内容分类（用于后台展示） ──
+    @SerializedName("contentType") val contentType: String? = null,
+    @SerializedName("riskLevel") val riskLevel: String? = null,
+    @SerializedName("sensitiveInfo") val sensitiveInfo: SensitiveInfoPayload? = null
+)
+
+/** 敏感信息标记（后端可据此做脱敏/展示） */
+data class SensitiveInfoPayload(
+    @SerializedName("hasIdCard") val hasIdCard: Boolean = false,
+    @SerializedName("hasPhone") val hasPhone: Boolean = false,
+    @SerializedName("hasBankCard") val hasBankCard: Boolean = false,
+    @SerializedName("hasAddress") val hasAddress: Boolean = false,
+    @SerializedName("hasMoney") val hasMoney: Boolean = false
+)
+
+/** 普通输入事件（非 OCR 事件走这里） */
 data class EventPayload(
     @SerializedName("packageName") val packageName: String,
     @SerializedName("appName") val appName: String?,
     @SerializedName("text") val text: String,
-    @SerializedName("timestamp") val timestamp: Long
+    @SerializedName("timestamp") val timestamp: Long,
+    @SerializedName("source") val source: String = "accessibility"
 )
 
 interface UploadApi {
