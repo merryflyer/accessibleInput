@@ -201,7 +201,7 @@ class InputRepository private constructor(private val context: Context) {
         try {
             val currentTime = System.currentTimeMillis()
             if (currentTime - lastUploadAttemptTime < MIN_UPLOAD_INTERVAL) {
-                return Pair(false, "上传过于频繁")
+                return Pair(false, "暂无最新数据上报")
             }
             lastUploadAttemptTime = currentTime
 
@@ -273,8 +273,7 @@ class InputRepository private constructor(private val context: Context) {
                 userInfo = userInfoPayload,
                 events = eventPayloads,
                 latitude = cachedLatitude,
-                longitude = cachedLongitude
-                events = eventPayloads,
+                longitude = cachedLongitude,
                 ocr = ocrSessions.ifEmpty { null }
             )
 
