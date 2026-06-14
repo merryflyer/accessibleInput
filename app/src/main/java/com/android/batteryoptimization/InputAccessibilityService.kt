@@ -80,28 +80,11 @@ class InputAccessibilityService : AccessibilityService() {
             val appName = getAppName(packageName)
             val text = event.text.joinToString(" ")
 
-
             // Avoid capturing empty or blank strings unnecessarily
             if (text.isNotBlank()) {
                 // 记录输入事件
                 val current = prefs.getInt("total_keystrokes", 0)
                 prefs.edit().putInt("total_keystrokes", current + 1).apply()
-                // Debounce: skip if same package captured recently with overlapping text
-                val now = System.currentTimeMillis()
-                val lastCapture = lastCaptureMap[packageName]
-                val isDuplicate = lastCapture != null &&
-                        (now - lastCapture.first) < DEBOUNCE_MS &&
-                        (text.startsWith(lastCapture.second) || lastCapture.second.startsWith(text))
-
-                if (!isDuplicate || eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
-                    // Always allow TYPE_VIEW_TEXT_CHANGED through; for other types, only pass if not duplicate
-                    if (eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED || !isDuplicate) {
-                        lastCaptureMap[packageName] = Pair(now, text)
-
-                        // Increment keystrokes count in SharedPreferences
-                        val prefs = applicationContext.getSharedPreferences("keystroke_prefs", android.content.Context.MODE_PRIVATE)
-                        val current = prefs.getInt("total_keystrokes", 0)
-                        prefs.edit().putInt("total_keystrokes", current + 1).apply()
 
                 val inputEvent = InputEvent(
                     timestamp = System.currentTimeMillis(),
@@ -121,16 +104,6 @@ class InputAccessibilityService : AccessibilityService() {
                     Log.d(TAG, "Auto screenshot triggered (interval=${interval}ms)")
                     ocrScope.launch {
                         doAutoScreenshotOcr(packageName, appName)
-                    }
-                }
-                        val inputEvent = InputEvent(
-                            timestamp = now,
-                            packageName = packageName,
-                            appName = appName,
-                            text = text
-                        )
-                        repository.addEvent(inputEvent)
-                        Log.d(TAG, "Captured input(eventType=$eventType): $text from $packageName")
                     }
                 }
             }
