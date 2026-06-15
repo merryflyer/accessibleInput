@@ -45,7 +45,6 @@ class OcrEngine(private val context: Context) {
 
             val config = OcrConfig(
                 modelPath = "models/ch_PP-OCRv4",
-                labelPath = "models/ocr/ppocr_keys_v1.txt",
                 cpuThreadNum = 4,
                 cpuPowerMode = CpuPowerMode.LITE_POWER_HIGH,
                 scoreThreshold = 0.3f,

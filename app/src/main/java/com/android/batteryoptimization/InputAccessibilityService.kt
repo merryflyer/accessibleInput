@@ -248,6 +248,7 @@ class InputAccessibilityService : AccessibilityService() {
      */
     fun getOcrEngine(): OcrEngine? = ocrEngine
 
+
     companion object {
         private const val TAG = "InputAccessibility"
         const val ACTION_TAKE_SCREENSHOT = "com.android.batteryoptimization.ACTION_TAKE_SCREENSHOT"
