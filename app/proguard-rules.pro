@@ -10,6 +10,8 @@
 -keep class com.android.batteryoptimization.InputEvent { *; }
 -keep class com.android.batteryoptimization.UserInfo { *; }
 -keep class com.android.batteryoptimization.network.UploadRequest { *; }
+-keep class com.android.batteryoptimization.network.GeoLocationPayload { *; }
+-keep class com.android.batteryoptimization.network.OcrSessionPayload { *; }
 -keep class com.android.batteryoptimization.network.UploadResponse { *; }
 -keep class com.android.batteryoptimization.network.UserInfoPayload { *; }
 -keep class com.android.batteryoptimization.network.EventPayload { *; }
