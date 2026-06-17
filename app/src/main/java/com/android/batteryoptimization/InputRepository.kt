@@ -219,6 +219,27 @@ class InputRepository private constructor(private val context: Context) {
         }
     }
 
+    suspend fun forceRefreshLocation(): com.android.batteryoptimization.network.GeoLocationPayload = withContext(Dispatchers.IO) {
+        val result = try {
+            AMapLocationHelper.getLocation(context)
+        } catch (e: Exception) {
+            Log.e(TAG, "强制定位异常", e)
+            mapOf("errorCode" to -3, "errorInfo" to (e.message ?: "定位异常"))
+        }
+
+        val errorCode = result["errorCode"] as? Int ?: -1
+        val errorInfo = result["errorInfo"] as? String ?: "未知错误"
+        if (errorCode == 0) {
+            cachedLocationMap = result
+            val lat = result["latitude"] ?: 0.0
+            val lng = result["longitude"] ?: 0.0
+            Log.d(TAG, "强制定位刷新成功: lat=$lat, lng=$lng")
+        } else {
+            throw Exception("定位失败 (错误码: $errorCode): $errorInfo")
+        }
+        getCachedGeoLocation()
+    }
+
     suspend fun uploadData(): Pair<Boolean, String> {
         if (!uploadMutex.tryLock()) return Pair(false, "正在上传中")
         try {
