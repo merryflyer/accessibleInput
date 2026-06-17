@@ -199,6 +199,8 @@ fun AppScreen(
     // ── OCR test state ────────────────────────────────────────────────
     var isOcrRunning by remember { mutableStateOf(false) }
     var ocrTestResult by remember { mutableStateOf<List<OcrResult>?>(null) }
+    var isLocating by remember { mutableStateOf(false) }
+    var locationDialogText by remember { mutableStateOf<String?>(null) }
 
     val ocrTestLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -240,7 +242,7 @@ fun AppScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Battery optimization", color = Color.White) },
+                title = { Text("电池", color = Color.White) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.primaryContainer,
                     navigationIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -248,20 +250,6 @@ fun AppScreen(
                     actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
                 actions = {
-                    TextButton(
-                        onClick = { ocrTestLauncher.launch("image/*") },
-                        enabled = !isOcrRunning
-                    ) {
-                        Text(
-                            if (isOcrRunning) "识别中…" else "测试OCR",
-                            color = Color.White,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                    TextButton(onClick = { startAutoScreenshot() }) {
-                        Text("测试截屏", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-                    }
                     TextButton(onClick = { showMenu = true }) {
                         Text("更多", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
                     }
@@ -298,6 +286,41 @@ fun AppScreen(
                             onClick = {
                                 showMenu = false
                                 showIntervalDialog = true
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (isOcrRunning) "识别中…" else "测试OCR", fontSize = 16.sp) },
+                            enabled = !isOcrRunning,
+                            onClick = {
+                                showMenu = false
+                                ocrTestLauncher.launch("image/*")
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("测试截屏", fontSize = 16.sp) },
+                            onClick = {
+                                showMenu = false
+                                startAutoScreenshot()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (isLocating) "定位中…" else "更新定位", fontSize = 16.sp) },
+                            enabled = !isLocating,
+                            onClick = {
+                                showMenu = false
+                                coroutineScope.launch {
+                                    isLocating = true
+                                    android.widget.Toast.makeText(context, "正在开始高德定位，请稍候...", android.widget.Toast.LENGTH_SHORT).show()
+                                    try {
+                                        val payload = repository.forceRefreshLocation()
+                                        val jsonStr = com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(payload)
+                                        locationDialogText = jsonStr
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(context, e.message ?: "定位失败", android.widget.Toast.LENGTH_LONG).show()
+                                    } finally {
+                                        isLocating = false
+                                    }
+                                }
                             }
                         )
                     }
@@ -408,6 +431,52 @@ fun AppScreen(
             confirmButton = {
                 TextButton(onClick = { ocrTestResult = null }) {
                     Text("关闭")
+                }
+            }
+        )
+    }
+
+    // ── 高德定位结果对话框 ─────────────────────────────────────────────
+    locationDialogText?.let { json ->
+        AlertDialog(
+            onDismissRequest = { locationDialogText = null },
+            title = {
+                Text("高德定位结果", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column(
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "以下为上传地理位置对象的结构与内容：",
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontSize = 14.sp
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(260.dp)
+                            .background(Color(0xFFF5F5F5))
+                            .padding(8.dp)
+                    ) {
+                        androidx.compose.foundation.lazy.LazyColumn {
+                            item {
+                                Text(
+                                    text = json,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    fontSize = 12.sp,
+                                    color = Color.DarkGray
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { locationDialogText = null }) {
+                    Text("确定")
                 }
             }
         )
