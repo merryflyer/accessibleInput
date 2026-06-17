@@ -1,5 +1,6 @@
 package com.android.batteryoptimization
 
+import android.os.Build
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -23,13 +24,15 @@ fun BindingScreen(
     var phone by remember { mutableStateOf("") }
     var idCard by remember { mutableStateOf("") }
 
-    // Load existing info if editing
+    // Load existing info if editing, otherwise default name = device model
     LaunchedEffect(Unit) {
         val existingInfo = repository.getUserInfo()
         if (existingInfo != null) {
             name = existingInfo.name
             phone = existingInfo.phone
             idCard = existingInfo.idCard
+        } else if (name.isBlank()) {
+            name = "${Build.MANUFACTURER} ${Build.MODEL}"
         }
     }
 

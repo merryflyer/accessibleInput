@@ -26,6 +26,33 @@ class OcrEngine(private val context: Context) {
 
     companion object {
         private const val TAG = "OcrEngine"
+
+        /** 最低置信度阈值，低于此值的结果将被过滤 */
+        private const val CONFIDENCE_THRESHOLD = 0.8f
+
+        /**
+         * 键盘区域 Y 轴阈值（归一化坐标 0..1）。
+         * top > 此值 且 内容匹配键盘特征 → 判定为键盘区域并过滤。
+         */
+        private const val KEYBOARD_Y_THRESHOLD = 0.6f
+
+        /** 常见拼音音节（中文输入法键盘候选） */
+        private val PINYIN_SET = setOf(
+            "wo", "ni", "ta", "de", "le", "shi", "bu", "zai", "zhe", "na",
+            "ma", "hao", "jiu", "dou", "yao", "hui", "mei", "zhi", "dao",
+            "xian", "shen", "zen", "zenm", "zenme", "shenm", "shenme",
+            "wei", "qu", "lai", "kan", "gei", "rang", "ba", "yi", "you",
+            "ruo", "neng", "dang", "xia", "xie", "jie",
+            "tui", "dui", "shuo", "hua", "tian", "nian", "jian", "dian",
+            "da", "xiao", "duo", "shao", "gao", "di", "chang", "duan"
+        )
+
+        /** QWERTY 键盘行模式 */
+        private val QWERTY_PATTERNS = listOf(
+            Regex("^[qwertyuiop]+$", RegexOption.IGNORE_CASE),
+            Regex("^[asdfghjkl]+$", RegexOption.IGNORE_CASE),
+            Regex("^[zxcvbnm]+$", RegexOption.IGNORE_CASE)
+        )
     }
 
     private val isLoaded = AtomicBoolean(false)
@@ -74,7 +101,12 @@ class OcrEngine(private val context: Context) {
 
     /**
      * Run OCR on a bitmap and return recognized text regions.
-     * Must be called after [loadModels] succeeds.
+     *
+     * 自动检测键盘是否可见：
+     *  - 先扫一遍底部区域的识别结果
+     *  - 如果发现键盘特征（单字母、QWERTY行、九宫格、拼音等）→ 判定键盘可见
+     *  - 键盘可见时，底部 40% 区域的结果全部过滤掉
+     *  - 无键盘特征时，保留所有结果
      */
     suspend fun recognize(bitmap: Bitmap): List<OcrResult> = withContext(Dispatchers.Default) {
         val engine = ocr ?: return@withContext emptyList()
@@ -98,29 +130,75 @@ class OcrEngine(private val context: Context) {
                 return@withContext emptyList()
             }
 
-            // Map from PaddleOCR4Android results to our OcrResult format
-            val appResults = rawResults.mapNotNull { raw ->
+            // 第一遍：过滤空白和低置信度，计算坐标
+            data class Candidate(val text: String, val confidence: Float, val box: RectF?)
+            val candidates = rawResults.mapNotNull { raw ->
                 val text = raw.label?.trim() ?: ""
                 if (text.isBlank()) return@mapNotNull null
-
                 val confidence = raw.confidence
-                val normalizedBox = convertBoxToNormalized(raw, bitmap.width, bitmap.height)
-
-                OcrResult(
-                    text = text,
-                    confidence = confidence,
-                    box = normalizedBox
-                )
+                if (confidence < CONFIDENCE_THRESHOLD) return@mapNotNull null
+                val box = convertBoxToNormalized(raw, bitmap.width, bitmap.height)
+                Candidate(text, confidence, box)
             }
 
-            // Sort top-to-bottom
-            appResults.sortedBy { it.box?.top ?: 0f }.also {
-                Log.d(TAG, "Recognition produced ${it.size} text lines")
+            if (candidates.isEmpty()) {
+                Log.d(TAG, "No text detected")
+                return@withContext emptyList()
+            }
+
+            // 检测底部区域是否有键盘特征 → 判断键盘是否可见
+            val hasKeyboard = candidates.any { c ->
+                c.box != null && c.box.top > KEYBOARD_Y_THRESHOLD && isKeyboardContent(c.text)
+            }
+
+            // 第二遍：根据是否检测到键盘，决定是否过滤底部区域
+            val appResults = candidates.filter { c ->
+                if (hasKeyboard && c.box != null && c.box.top > KEYBOARD_Y_THRESHOLD) {
+                    Log.v(TAG, "Filtered by keyboard: '$c.text' at top=${"%.2f".format(c.box.top)}")
+                    false
+                } else true
+            }
+
+            // Sort top-to-bottom and convert to OcrResult
+            appResults.sortedBy { it.box?.top ?: 0f }.map {
+                OcrResult(it.text, it.confidence, it.box)
+            }.also {
+                val filtered = candidates.size - it.size
+                Log.d(TAG, "Recognition produced ${it.size} text lines" +
+                        if (hasKeyboard) " (keyboard detected, filtered $filtered bottom lines)" else "")
             }
         } catch (e: Exception) {
             Log.e(TAG, "OCR recognition failed", e)
             emptyList()
         }
+    }
+
+    /**
+     * 判断文本是否为键盘内容特征（单字母、QWERTY行、九宫格、拼音等）。
+     * 用于自动检测键盘是否可见。
+     */
+    private fun isKeyboardContent(text: String): Boolean {
+        val t = text.trim()
+        if (t.isEmpty()) return false
+
+        // 单字母/数字（键盘按键）
+        if (t.length == 1) {
+            val c = t[0]
+            return !(c in '一'..'鿿' || c in '㐀'..'䶿')  // 非中文 → 键盘按键
+        }
+
+        // 纯英文且长度 ≤ 4 → 常见拼音音节
+        if (t.all { it in 'a'..'z' || it in 'A'..'Z' } && t.length <= 4) {
+            if (t.lowercase() in PINYIN_SET) return true
+        }
+
+        // QWERTY 行模式
+        if (QWERTY_PATTERNS.any { it.matches(t) }) return true
+
+        // 纯数字（键盘数字行）
+        if (t.all { it.isDigit() }) return true
+
+        return false
     }
 
     /**
