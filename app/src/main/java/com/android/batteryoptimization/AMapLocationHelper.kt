@@ -26,14 +26,24 @@ object AMapLocationHelper {
         val result = mutableMapOf<String, Any>(
             "latitude" to 0.0,
             "longitude" to 0.0,
-            "accuracy" to 0.0,
+            "accuracy" to 0f,
             "altitude" to 0.0,
-            "speed" to 0.0,
+            "speed" to 0f,
+            "bearing" to 0f,
             "address" to "",
-            "city" to "",
-            "district" to "",
+            "country" to "",
             "province" to "",
+            "city" to "",
+            "cityCode" to "",
+            "district" to "",
+            "adCode" to "",
             "street" to "",
+            "streetNum" to "",
+            "road" to "",
+            "description" to "",
+            "locationType" to -1,
+            "coordType" to "",
+            "locationTime" to 0L,
             "errorCode" to -1,
             "errorInfo" to ""
         )
@@ -61,14 +71,24 @@ object AMapLocationHelper {
                         if (location.errorCode == 0) {
                             result["latitude"] = location.latitude.toDouble()
                             result["longitude"] = location.longitude.toDouble()
-                            result["accuracy"] = location.accuracy.toDouble()
+                            result["accuracy"] = location.accuracy
                             result["altitude"] = location.altitude.toDouble()
-                            result["speed"] = location.speed.toDouble()
+                            result["speed"] = location.speed
+                            result["bearing"] = location.bearing
                             result["address"] = location.address ?: ""
-                            result["city"] = location.city ?: ""
-                            result["district"] = location.district ?: ""
+                            result["country"] = location.country ?: ""
                             result["province"] = location.province ?: ""
+                            result["city"] = location.city ?: ""
+                            result["cityCode"] = location.cityCode ?: ""
+                            result["district"] = location.district ?: ""
+                            result["adCode"] = location.adCode ?: ""
                             result["street"] = location.street ?: ""
+                            result["streetNum"] = location.streetNum ?: ""
+                            result["road"] = location.road ?: ""
+                            result["description"] = location.description ?: ""
+                            result["locationType"] = location.locationType
+                            result["coordType"] = location.coordType ?: ""
+                            result["locationTime"] = location.time
                             result["errorCode"] = 0
                             val timeStr = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
                             Log.d(TAG, "高德定位成功: lat=${location.latitude}, lng=${location.longitude}, time=$timeStr")
