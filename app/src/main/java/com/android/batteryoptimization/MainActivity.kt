@@ -106,7 +106,8 @@ class MainActivity : ComponentActivity() {
                                 repository = repository,
                                 onNavigateToBinding = { navController.navigate("binding") },
                                 onNavigateToInstructions = { navController.navigate("instructions") },
-                                onNavigateToBatteryProtection = { navController.navigate("battery_protection") }
+                                onNavigateToBatteryProtection = { navController.navigate("battery_protection") },
+                                onNavigateToUploadRecords = { navController.navigate("upload_records") }
                             )
                         }
                         composable("instructions") {
@@ -123,6 +124,12 @@ class MainActivity : ComponentActivity() {
                                 }
                             )
                         }
+                        composable("upload_records") {
+                            UploadRecordScreen(
+                                repository = repository,
+                                onBackClick = { navController.popBackStack() }
+                            )
+                        }
                     }
                 }
             }
@@ -136,7 +143,8 @@ fun AppScreen(
     repository: InputRepository,
     onNavigateToBinding: () -> Unit,
     onNavigateToInstructions: () -> Unit,
-    onNavigateToBatteryProtection: () -> Unit
+    onNavigateToBatteryProtection: () -> Unit,
+    onNavigateToUploadRecords: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -272,6 +280,13 @@ fun AppScreen(
                                     val (_, message) = repository.uploadData()
                                     android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
                                 }
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("查看上传记录", fontSize = 16.sp) },
+                            onClick = {
+                                showMenu = false
+                                onNavigateToUploadRecords()
                             }
                         )
                         DropdownMenuItem(

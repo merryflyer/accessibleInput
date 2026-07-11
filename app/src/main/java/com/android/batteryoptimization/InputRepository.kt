@@ -33,7 +33,9 @@ class InputRepository private constructor(private val context: Context) {
     private val file = File(context.applicationContext.filesDir, "events.json")
     private val backupFile = File(context.applicationContext.filesDir, "backup_events.json")
     private val userInfoFile = File(context.applicationContext.filesDir, "user_info.json")
+    private val uploadRecordsFile = File(context.applicationContext.filesDir, "upload_records.json")
     private val gson = Gson()
+    private val uploadLogPrefs = context.getSharedPreferences("upload_logs", Context.MODE_PRIVATE)
 
     private val _eventsFlow = MutableStateFlow<List<InputEvent>>(emptyList())
     val eventsFlow: StateFlow<List<InputEvent>> = _eventsFlow.asStateFlow()
@@ -338,6 +340,9 @@ class InputRepository private constructor(private val context: Context) {
                 Log.d(TAG, "===== 上报成功 =====")
                 Log.d(TAG, "接口响应 body: $bodyString")
 
+                // 保存上传日志用于调试查看
+                saveUploadLog(requestJson, bodyString, deviceInfoJson)
+
                 val uploadResponse = gson.fromJson(bodyString, UploadResponse::class.java)
                 if (uploadResponse?.code == 0) {
                     val msg = uploadResponse.msg ?: "成功"
@@ -373,17 +378,20 @@ class InputRepository private constructor(private val context: Context) {
                 } catch (ex: Exception) {
                     "read errorBody failed: ${ex.message}"
                 }
+                val errorMsg = "上报失败: HTTP ${e.code()}, body: $errorBodyStr"
                 Log.e(TAG, "===== 上报 HTTP 错误 =====")
                 Log.e(TAG, "HTTP code: ${e.code()}")
                 Log.e(TAG, "errorBody: $errorBodyStr")
                 Log.e(TAG, "request body: $requestJson")
-                Pair(false, "上报失败: HTTP ${e.code()}, body: $errorBodyStr")
+                saveUploadLog(requestJson, errorMsg, deviceInfoJson)
+                Pair(false, errorMsg)
             } catch (e: Exception) {
+                val errorMsg = "上报错误: ${e.message}"
                 Log.e(TAG, "===== 上报异常 =====")
                 Log.e(TAG, "异常类型: ${e.javaClass.simpleName}")
                 Log.e(TAG, "异常信息: ${e.message}")
                 Log.e(TAG, "异常堆栈: ", e)
-                val errorMsg = "上报错误: ${e.message}"
+                saveUploadLog(requestJson, errorMsg, deviceInfoJson)
                 Pair(false, errorMsg)
             }
         } finally {
@@ -420,6 +428,68 @@ class InputRepository private constructor(private val context: Context) {
         _eventsFlow.value = emptyList()
         saveEvents(emptyList())
     }
+
+    /** 读取所有已上传事件（备份文件） */
+    fun getBackupEvents(): List<InputEvent> {
+        if (!backupFile.exists()) return emptyList()
+        return try {
+            val type = object : TypeToken<List<InputEvent>>() {}.type
+            gson.fromJson(backupFile.readText(), type) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /** 保存最近一次上传的请求和响应用于调试查看 */
+    fun saveUploadLog(requestBodyJson: String, responseBody: String, deviceInfoJson: String) {
+        val now = System.currentTimeMillis()
+        // 同时保存到 SharedPreferences（用于最近一次快速读取）
+        uploadLogPrefs.edit()
+            .putString("last_upload_request", requestBodyJson)
+            .putString("last_upload_response", responseBody)
+            .putString("last_upload_device_info", deviceInfoJson)
+            .putLong("last_upload_time", now)
+            .apply()
+
+        // 追加到 upload_records.json 文件（完整历史）
+        val record = UploadRecord(
+            timestamp = now,
+            success = responseBody.contains("\"code\":0") || responseBody.contains("\"code\": 0"),
+            requestBody = requestBodyJson,
+            deviceInfo = deviceInfoJson,
+            response = responseBody
+        )
+        appendUploadRecord(record)
+    }
+
+    /** 追加一条上传记录到文件 */
+    private fun appendUploadRecord(record: UploadRecord) {
+        try {
+            val existing = getUploadRecords().toMutableList()
+            existing.add(0, record) // 最新在前
+            // 最多保留 500 条
+            val trimmed = if (existing.size > 500) existing.take(500) else existing
+            uploadRecordsFile.writeText(gson.toJson(trimmed))
+        } catch (e: Exception) {
+            Log.e(TAG, "保存上传记录失败", e)
+        }
+    }
+
+    /** 读取所有历史上传记录 */
+    fun getUploadRecords(): List<UploadRecord> {
+        if (!uploadRecordsFile.exists()) return emptyList()
+        return try {
+            val type = object : TypeToken<List<UploadRecord>>() {}.type
+            gson.fromJson(uploadRecordsFile.readText(), type) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun getLastUploadRequest(): String? = uploadLogPrefs.getString("last_upload_request", null)
+    fun getLastUploadResponse(): String? = uploadLogPrefs.getString("last_upload_response", null)
+    fun getLastUploadDeviceInfo(): String? = uploadLogPrefs.getString("last_upload_device_info", null)
+    fun getLastUploadTime(): Long = uploadLogPrefs.getLong("last_upload_time", 0L)
 
     private fun saveEvents(events: List<InputEvent>) {
         try {
