@@ -1,7 +1,6 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
-    id("io.github.didi.drouter")
 }
 
 android {
@@ -42,4 +41,8 @@ dependencies {
 
     // DRouter 运行时（:ocr_api 已以 api 形式暴露，这里显式声明以稳妥）
     implementation("io.github.didi:drouter-api:2.4.6")
+
+    // 协程（OcrEngine 使用 withContext/Dispatchers）
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 }

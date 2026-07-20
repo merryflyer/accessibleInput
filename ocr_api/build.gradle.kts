@@ -1,7 +1,6 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
-    id("io.github.didi.drouter")
 }
 
 android {

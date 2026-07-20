@@ -1,8 +1,17 @@
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath("io.github.didi:drouter-plugin:1.4.0")
+    }
+}
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("io.github.didi.drouter")
 }
+apply(plugin = "com.didi.drouter")
 
 android {
     namespace = "com.android.batteryoptimization"

@@ -3,6 +3,7 @@ package com.android.batteryoptimization.ocr
 import android.content.Context
 import com.android.batteryoptimization.ocr.api.OcrResult
 import android.graphics.Bitmap
+import android.graphics.RectF
 import android.util.Log
 import com.equationl.paddleocr4android.CpuPowerMode
 import com.equationl.paddleocr4android.OCR
@@ -226,10 +227,10 @@ class OcrEngine(private val context: Context) {
         }
 
         return RectF(
-            left = minX.toFloat() / bitmapWidth,
-            top = minY.toFloat() / bitmapHeight,
-            right = maxX.toFloat() / bitmapWidth,
-            bottom = maxY.toFloat() / bitmapHeight
+            minX.toFloat() / bitmapWidth,
+            minY.toFloat() / bitmapHeight,
+            maxX.toFloat() / bitmapWidth,
+            maxY.toFloat() / bitmapHeight
         )
     }
 
