@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("io.github.didi.drouter")
 }
 
 android {
@@ -94,8 +95,17 @@ dependencies {
     // AMap Location SDK (高德定位)
     implementation("com.amap.api:location:6.4.7")
 
-    // PaddleLite — on-device OCR inference
-    implementation(project(":PaddleOCR4Android"))
+    // OCR 接口/数据（仅 api，不含实现；具体实现在独立 :ocr_module）
+    implementation(project(":ocr_api"))
+
+    // OCR 实现（可选）：useOcr=false 时 :app 不依赖 :ocr_module，仍可独立运行（OCR 降级关闭）
+    val useOcr = (project.findProperty("useOcr") as? String)?.toBoolean() ?: true
+    if (useOcr) {
+        implementation(project(":ocr_module"))
+    }
+
+    // DRouter 运行时（:ocr_api 已以 api 暴露，这里显式声明）
+    implementation("io.github.didi:drouter-api:2.4.6")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")

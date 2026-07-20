@@ -1,6 +1,7 @@
 package com.android.batteryoptimization.ocr
 
 import android.content.Context
+import com.android.batteryoptimization.ocr.api.OcrResult
 import android.graphics.Bitmap
 import android.util.Log
 import com.equationl.paddleocr4android.CpuPowerMode

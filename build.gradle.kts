@@ -2,4 +2,5 @@
 plugins {
     id("com.android.application") version "8.2.2" apply false
     id("org.jetbrains.kotlin.android") version "1.9.0" apply false
+    id("io.github.didi.drouter") version "1.4.0" apply false
 }

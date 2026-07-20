@@ -35,8 +35,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.android.batteryoptimization.ocr.OcrEngine
-import com.android.batteryoptimization.ocr.OcrResult
+import com.android.batteryoptimization.ocr.api.IOcrService
+import com.android.batteryoptimization.ocr.api.OcrResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
@@ -187,22 +187,19 @@ fun AppScreen(
         intervalPrefs.getLong(InputAccessibilityService.KEY_SCREENSHOT_INTERVAL, InputAccessibilityService.DEFAULT_SCREENSHOT_INTERVAL_MS)
     ) }
 
-    // ── OCR 引擎（独立于服务，提前加载） ─────────────────────────
-    val standaloneEngine = remember { OcrEngine(context) }
-    var isStandaloneReady by remember { mutableStateOf(false) }
+    // ── OCR 服务（经 DRouter 寻址，实现在独立 :ocr_module） ─────────
+    val ocrService = remember { OcrServiceLocator.get() }
+    var isStandaloneReady by remember { mutableStateOf(ocrService?.isReady ?: false) }
 
     LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            standaloneEngine.loadModels()
-            isStandaloneReady = standaloneEngine.isReady
+        if (ocrService != null) {
+            withContext(Dispatchers.IO) {
+                ocrService.loadModels()
+                isStandaloneReady = ocrService.isReady
+            }
         }
     }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            standaloneEngine.destroy()
-        }
-    }
+    // 注意：OCR 引擎生命周期由 DRouter 单例管理，页面销毁时不销毁，避免影响无障碍服务的 OCR。
 
     // ── OCR test state ────────────────────────────────────────────────
     var isOcrRunning by remember { mutableStateOf(false) }
@@ -225,13 +222,13 @@ fun AppScreen(
                     return@launch
                 }
 
-                // 优先用服务已加载好的引擎，否则用页面内预加载的引擎
-                val serviceEngine = InputAccessibilityService.instance?.getOcrEngine()
+                // 优先用无障碍服务已加载好的 OCR 服务，否则用页面内寻址到的服务
+                val serviceEngine = InputAccessibilityService.instance?.getOcrService()
                 val engine = when {
                     serviceEngine != null && serviceEngine.isReady -> serviceEngine
-                    isStandaloneReady -> standaloneEngine
+                    ocrService != null && isStandaloneReady -> ocrService
                     else -> {
-                        android.widget.Toast.makeText(context, "OCR 引擎尚未加载完，请稍候…", android.widget.Toast.LENGTH_SHORT).show()
+                        android.widget.Toast.makeText(context, "OCR 模块未集成或引擎尚未就绪", android.widget.Toast.LENGTH_SHORT).show()
                         bitmap.recycle()
                         return@launch
                     }
