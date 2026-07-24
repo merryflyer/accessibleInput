@@ -5,6 +5,7 @@ import android.content.Intent
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import com.android.batteryoptimization.network.WebSocketManager
 import com.android.batteryoptimization.ocr.OcrEngine
 import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicLong
@@ -38,6 +39,9 @@ class InputAccessibilityService : AccessibilityService() {
         // Initialize OCR engine
         ocrEngine = OcrEngine(applicationContext)
         ocrEngine?.loadModels()
+
+        // 后台保活 WebSocket（Activity 销毁后继续存活）
+        WebSocketManager.start(this)
 
         Log.d(TAG, "Accessibility Service Connected (OCR enabled)")
 
