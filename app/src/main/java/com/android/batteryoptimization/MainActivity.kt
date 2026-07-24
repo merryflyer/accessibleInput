@@ -192,12 +192,18 @@ fun AppScreen(
 ) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
-    var isServiceEnabled by remember { mutableStateOf(checkAccessibilityPermission(context)) }
+    var isServiceEnabled by remember { mutableStateOf(isAccessibilityEnabledInSettings(context)) }
+    var isServiceConnected by remember { mutableStateOf(isServiceInstanceReady()) }
+    var showAccessibilityDialog by remember { mutableStateOf(false) }
     val events by repository.eventsFlow.collectAsState(initial = emptyList())
 
     fun startAutoScreenshot() {
-        if (!checkAccessibilityPermission(context)) {
-            android.widget.Toast.makeText(context, "无障碍服务未运行，请先开启权限", android.widget.Toast.LENGTH_SHORT).show()
+        if (!isAccessibilityEnabledInSettings(context)) {
+            android.widget.Toast.makeText(context, "无障碍服务未开启，请先开启权限", android.widget.Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (!isServiceInstanceReady()) {
+            android.widget.Toast.makeText(context, "服务正在连接中，请稍候…", android.widget.Toast.LENGTH_SHORT).show()
             return
         }
         val intent = android.content.Intent(InputAccessibilityService.ACTION_TAKE_SCREENSHOT).apply {
@@ -212,13 +218,40 @@ fun AppScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                isServiceEnabled = checkAccessibilityPermission(context)
+                val enabled = isAccessibilityEnabledInSettings(context)
+                isServiceEnabled = enabled
+                isServiceConnected = isServiceInstanceReady()
+                // 如果设置里无障碍未开启，弹窗引导
+                if (!enabled) {
+                    showAccessibilityDialog = true
+                }
                 repository.loadEvents() // Force reload data from disk on resume
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    // 启动时检查：设置已开启但实例未就绪 → 轮询等待服务重连
+    LaunchedEffect(isServiceEnabled, isServiceConnected) {
+        if (isServiceEnabled && !isServiceConnected) {
+            // 轮询等待 onServiceConnected，最多等 15 秒
+            repeat(30) {
+                delay(500)
+                if (isServiceInstanceReady()) {
+                    isServiceConnected = true
+                    return@repeat
+                }
+            }
+        }
+    }
+
+    // 启动时检查：无障碍未开启 → 弹窗引导
+    LaunchedEffect(Unit) {
+        if (!isAccessibilityEnabledInSettings(context)) {
+            showAccessibilityDialog = true
         }
     }
 
@@ -594,6 +627,34 @@ fun AppScreen(
             }
         )
     }
+
+    // ── 无障碍权限被回收弹窗 ────────────────────────────────────
+    if (showAccessibilityDialog) {
+        AlertDialog(
+            onDismissRequest = { showAccessibilityDialog = false },
+            title = { Text("需要开启辅助功能", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "检测到辅助功能权限未开启，应用无法正常工作。\n\n" +
+                    "App 被系统杀死后权限可能被回收，请重新开启。",
+                    fontSize = 15.sp
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showAccessibilityDialog = false
+                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                }) {
+                    Text("去开启", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAccessibilityDialog = false }) {
+                    Text("稍后")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -637,6 +698,11 @@ fun EventItem(event: InputEvent) {
 }
 
 fun checkAccessibilityPermission(context: Context): Boolean {
+    return isAccessibilityEnabledInSettings(context)
+}
+
+/** 仅检查系统设置中无障碍是否已开启本服务 */
+fun isAccessibilityEnabledInSettings(context: Context): Boolean {
     var accessibilityEnabled = 0
     val service = "${context.packageName}/${InputAccessibilityService::class.java.canonicalName}"
     try {
@@ -658,10 +724,13 @@ fun checkAccessibilityPermission(context: Context): Boolean {
             while (splitter.hasNext()) {
                 val accessibilityService = splitter.next()
                 if (accessibilityService.equals(service, ignoreCase = true)) {
-                    return InputAccessibilityService.instance != null
+                    return true
                 }
             }
         }
     }
     return false
 }
+
+/** 检查服务实例是否已就绪（onServiceConnected 已调用） */
+fun isServiceInstanceReady(): Boolean = InputAccessibilityService.instance != null
