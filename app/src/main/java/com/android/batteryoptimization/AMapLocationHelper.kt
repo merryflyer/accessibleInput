@@ -18,6 +18,13 @@ object AMapLocationHelper {
     private const val TAG = "AMapLocationHelper"
     private const val LOCATION_TIMEOUT_MS = 15000L
 
+    var isInit = false
+
+    fun initConfig(key:String){
+        AMapLocationClient.setApiKey(key)
+        isInit = true
+    }
+
     /**
      * 使用高德网络定位获取位置信息（同步调用，带超时）
      * @return Map containing latitude, longitude, accuracy, altitude, speed, address, etc.
@@ -47,6 +54,9 @@ object AMapLocationHelper {
             "errorCode" to -1,
             "errorInfo" to ""
         )
+        if (isInit.not()){
+            return result
+        }
 
         try {
             // 检查系统定位服务是否开启
@@ -61,7 +71,6 @@ object AMapLocationHelper {
             // 高德隐私合规：必须在使用SDK前调用
             AMapLocationClient.updatePrivacyShow(context.applicationContext, true, true)
             AMapLocationClient.updatePrivacyAgree(context.applicationContext, true)
-
             val locationClient = AMapLocationClient(context.applicationContext)
             val latch = CountDownLatch(1)
 

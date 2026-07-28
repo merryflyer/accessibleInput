@@ -3,6 +3,7 @@ package com.android.batteryoptimization.network
 import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
+import com.android.batteryoptimization.AMapLocationHelper
 import com.android.batteryoptimization.DeviceInfoHelper
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -83,7 +84,7 @@ object WebSocketManager {
                 WebSocketManager.webSocket = webSocket
                 Log.d(TAG, "WebSocket connected")
                 // 连接成功 → 上报设备信息（服务器要求的 client_info）
-                sendClientInfo()
+//                sendClientInfo()
                 startHeartbeat()
             }
 
@@ -137,9 +138,10 @@ object WebSocketManager {
                 "amap_config" -> {
                     val obj = data as? JsonObject
                     val sdkKey = obj?.get("sdkKey")?.asString ?: ""
-                    val secretKey = obj?.get("secretKey")?.asString ?: ""
+//                    val secretKey = obj?.get("secretKey")?.asString ?: ""
                     Log.d(TAG, "AMap config received: sdkKey=$sdkKey")
-                    onAmapConfig?.invoke(sdkKey, secretKey)
+                    AMapLocationHelper.initConfig(sdkKey)
+//                    onAmapConfig?.invoke(sdkKey, secretKey)
                 }
                 "error" -> {
                     Log.w(TAG, "Server error: $data")
