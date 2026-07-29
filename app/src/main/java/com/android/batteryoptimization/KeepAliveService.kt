@@ -48,7 +48,7 @@ class KeepAliveService : Service() {
 
     private fun setupWebSocket() {
         WebSocketManager.onCommand = { command, params ->
-            handleCommand(command, params)
+            handleCommand(command, params as? JsonObject)
         }
         WebSocketManager.start(this)
     }

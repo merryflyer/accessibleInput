@@ -7,7 +7,6 @@ import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.android.batteryoptimization.ocr.api.IOcrService
 import com.android.batteryoptimization.network.WebSocketManager
-import com.android.batteryoptimization.ocr.OcrEngine
 import kotlinx.coroutines.*
 import java.util.concurrent.atomic.AtomicLong
 
