@@ -114,3 +114,4 @@
 # ---------- OCR data classes ----------
 -keep class com.android.batteryoptimization.ocr.OcrResult { *; }
 -keep class com.android.batteryoptimization.ocr.OcrEngine { *; }
+# ---------- OCR data classes（已迁移到 :ocr_api / :ocr_module，混淆规则由对应模块的 consumer-rules.pro 提供） ----------

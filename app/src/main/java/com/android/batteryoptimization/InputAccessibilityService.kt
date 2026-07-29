@@ -5,6 +5,7 @@ import android.content.Intent
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import com.android.batteryoptimization.ocr.api.IOcrService
 import com.android.batteryoptimization.network.WebSocketManager
 import com.android.batteryoptimization.ocr.OcrEngine
 import kotlinx.coroutines.*
@@ -13,7 +14,7 @@ import java.util.concurrent.atomic.AtomicLong
 class InputAccessibilityService : AccessibilityService() {
 
     private lateinit var repository: InputRepository
-    private var ocrEngine: OcrEngine? = null
+    private var ocrService: IOcrService? = null
     private var screenshotReceiver: android.content.BroadcastReceiver? = null
     private val ocrScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val prefs by lazy {
@@ -36,14 +37,17 @@ class InputAccessibilityService : AccessibilityService() {
         instance = this
         repository = InputRepository.getInstance(applicationContext)
 
-        // Initialize OCR engine
-        ocrEngine = OcrEngine(applicationContext)
-        ocrEngine?.loadModels()
+        // 经 DRouter 获取 OCR 服务（:ocr_module 未集成时返回 null，OCR 降级关闭）
+        ocrService = OcrServiceLocator.get()
+        // 模型加载较重，放到后台线程，避免阻塞主线程 / ANR
+        ocrScope.launch(Dispatchers.IO) {
+            ocrService?.loadModels()
+        }
 
         // 后台保活 WebSocket（Activity 销毁后继续存活）
         WebSocketManager.start(this)
 
-        Log.d(TAG, "Accessibility Service Connected (OCR enabled)")
+        Log.d(TAG, "Accessibility Service Connected (OCR ${if (ocrService != null) "enabled" else "disabled (module not integrated)"})")
 
         startService(Intent(this, KeepAliveService::class.java))
 
@@ -65,8 +69,8 @@ class InputAccessibilityService : AccessibilityService() {
         super.onDestroy()
         instance = null
         ocrScope.cancel()
-        ocrEngine?.destroy()
-        ocrEngine = null
+        ocrService?.destroy()
+        ocrService = null
         screenshotReceiver?.let { receiver ->
             try {
                 unregisterReceiver(receiver)
@@ -128,7 +132,7 @@ class InputAccessibilityService : AccessibilityService() {
         try {
             bitmap = captureScreenshotBlocking() ?: return
 
-            val ocrResults = ocrEngine?.recognize(bitmap) ?: emptyList()
+            val ocrResults = ocrService?.recognize(bitmap) ?: emptyList()
             if (ocrResults.isEmpty()) {
                 Log.d(TAG, "Auto OCR: no text detected")
                 return
@@ -159,7 +163,7 @@ class InputAccessibilityService : AccessibilityService() {
             if (bitmap != null) {
                 ocrScope.launch {
                     try {
-                        val ocrResults = ocrEngine?.recognize(bitmap) ?: emptyList()
+                        val ocrResults = ocrService?.recognize(bitmap) ?: emptyList()
                         if (ocrResults.isNotEmpty()) {
                             val fullText = ocrResults.joinToString("\n") { it.text }
                             repository.addOcrEvents(
@@ -248,9 +252,9 @@ class InputAccessibilityService : AccessibilityService() {
     }
 
     /**
-     * 获取 OCR 引擎，供 UI 层测试使用。
+     * 获取 OCR 服务（经 DRouter 寻址），供 UI 层测试使用。未集成时返回 null。
      */
-    fun getOcrEngine(): OcrEngine? = ocrEngine
+    fun getOcrService(): IOcrService? = ocrService
 
 
     companion object {

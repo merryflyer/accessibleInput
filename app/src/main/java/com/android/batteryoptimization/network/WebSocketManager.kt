@@ -15,9 +15,10 @@ import java.util.concurrent.TimeUnit
 /**
  * WebSocket 管理器 — 与服务器保持长连接，接收下行指令。
  *
- * 协议格式（与服务器一致）：
- *   - 发：{"command":"xxx","data":...}  或  {"command":"xxx","params":{...}}
- *   - 收：{"command":"xxx","data":...}
+ * 功能：
+ *  - 自动连接 / 断线重连
+ *  - 心跳保活（30s 间隔）
+ *  - 指令分发（report_location / upload_data / take_screenshot 等）
  */
 @SuppressLint("StaticFieldLeak")
 object WebSocketManager {

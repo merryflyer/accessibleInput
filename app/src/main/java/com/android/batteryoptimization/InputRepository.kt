@@ -7,7 +7,7 @@ import com.android.batteryoptimization.network.NetworkClient
 import com.android.batteryoptimization.network.UploadResponse
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import com.android.batteryoptimization.ocr.OcrResult
+import com.android.batteryoptimization.ocr.api.OcrResult
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
