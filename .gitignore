@@ -16,5 +16,5 @@ app/build/
 apks/
 
 # OCR model files (large, downloaded separately)
-app/src/main/assets/models/ocr/*.nb
-app/src/main/assets/models/ocr/*.tar
+app/src/main/assets/models/**/*.nb
+app/src/main/assets/models/**/*.tar
