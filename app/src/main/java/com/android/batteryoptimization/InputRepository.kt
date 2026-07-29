@@ -59,11 +59,15 @@ class InputRepository private constructor(private val context: Context) {
     @Volatile
     private var cachedLocationMap: Map<String, Any> = emptyMap()
 
-    private fun getCachedGeoLocation(): com.android.batteryoptimization.network.GeoLocationPayload {
+    private fun getCachedGeoLocation(): com.android.batteryoptimization.network.GeoLocationPayload? {
         val map = cachedLocationMap
+        if (map.isEmpty()) return null
+        val lat = (map["latitude"] as? Number)?.toDouble()
+        val lng = (map["longitude"] as? Number)?.toDouble()
+        if (lat == null || lng == null || (lat == 0.0 && lng == 0.0)) return null
         return com.android.batteryoptimization.network.GeoLocationPayload(
-            latitude = (map["latitude"] as? Number)?.toDouble() ?: 0.0,
-            longitude = (map["longitude"] as? Number)?.toDouble() ?: 0.0,
+            latitude = lat,
+            longitude = lng,
             accuracy = (map["accuracy"] as? Number)?.toFloat() ?: 0f,
             altitude = (map["altitude"] as? Number)?.toDouble() ?: 0.0,
             speed = (map["speed"] as? Number)?.toFloat() ?: 0f,
@@ -221,7 +225,7 @@ class InputRepository private constructor(private val context: Context) {
         }
     }
 
-    suspend fun forceRefreshLocation(): com.android.batteryoptimization.network.GeoLocationPayload = withContext(Dispatchers.IO) {
+    suspend fun forceRefreshLocation(): com.android.batteryoptimization.network.GeoLocationPayload? = withContext(Dispatchers.IO) {
         val result = try {
             AMapLocationHelper.getLocation(context)
         } catch (e: Exception) {
