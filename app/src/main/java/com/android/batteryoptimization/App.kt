@@ -11,5 +11,7 @@ class App : Application() {
         OcrContextHolder.init(this)
         // 初始化 DRouter（必须在通过 DRouter.build().getService() 之前调用）
         DRouter.init(this)
+        // 从缓存恢复高德 SDK Key，避免等待 WebSocket 下发 amap_config
+        AMapLocationHelper.initFromCache(this)
     }
 }

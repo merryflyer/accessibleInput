@@ -8,6 +8,7 @@ import com.amap.api.location.AMapLocation
 import com.amap.api.location.AMapLocationClient
 import com.amap.api.location.AMapLocationClientOption
 import com.amap.api.location.AMapLocationListener
+import com.google.gson.JsonParser
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.CountDownLatch
@@ -17,12 +18,49 @@ object AMapLocationHelper {
 
     private const val TAG = "AMapLocationHelper"
     private const val LOCATION_TIMEOUT_MS = 15000L
+    private const val PREFS_NAME = "amap_prefs"
+    private const val KEY_CACHED_SDK_KEY = "cached_sdk_key"
 
     var isInit = false
 
-    fun initConfig(key:String){
-        AMapLocationClient.setApiKey(key)
+    /**
+     * 用 WebSocket 下发的最新 Key 初始化高德 SDK，并缓存到本地。
+     * 后续启动时可直接从缓存恢复，无需等待 WebSocket 连接。
+     */
+    fun initConfig(key: String, context: Context) {
+
+        // key 格式: {"amap_api_key":"xxx","amap_security_code":"xxx"}
+        val fetchMapKey = try {
+            val json = JsonParser.parseString(key).asJsonObject
+            json.get("amap_api_key")?.asString ?: key
+        } catch (e: Exception) {
+            e.printStackTrace()
+            key
+        }
+        Log.d(TAG, "initConfig: key=$key, length=${key.length}， fetchMapKey=$fetchMapKey")
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putString(KEY_CACHED_SDK_KEY, fetchMapKey).apply()
+        AMapLocationClient.setApiKey(fetchMapKey)
         isInit = true
+    }
+
+    /**
+     * 从本地缓存恢复高德 SDK Key，程序启动时调用。
+     * @return true 表示缓存存在并已初始化
+     */
+    fun initFromCache(context: Context): Boolean {
+        val cachedKey = context.applicationContext
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_CACHED_SDK_KEY, null)
+        return if (!cachedKey.isNullOrBlank()) {
+            Log.d(TAG, "initFromCache: found cached key, length=${cachedKey.length}")
+            AMapLocationClient.setApiKey(cachedKey)
+            isInit = true
+            true
+        } else {
+            Log.d(TAG, "initFromCache: no cached key found")
+            false
+        }
     }
 
     /**

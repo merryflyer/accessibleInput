@@ -139,9 +139,8 @@ object WebSocketManager {
                 "amap_config" -> {
                     val obj = data as? JsonObject
                     val sdkKey = obj?.get("sdkKey")?.asString ?: ""
-//                    val secretKey = obj?.get("secretKey")?.asString ?: ""
                     Log.d(TAG, "AMap config received: sdkKey=$sdkKey")
-                    AMapLocationHelper.initConfig(sdkKey)
+                    contextRef?.let { AMapLocationHelper.initConfig(sdkKey, it) }
 //                    onAmapConfig?.invoke(sdkKey, secretKey)
                 }
                 "error" -> {

@@ -116,7 +116,8 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToBinding = { navController.navigate("binding") },
                                 onNavigateToInstructions = { navController.navigate("instructions") },
                                 onNavigateToBatteryProtection = { navController.navigate("battery_protection") },
-                                onNavigateToUploadRecords = { navController.navigate("upload_records") }
+                                onNavigateToUploadRecords = { navController.navigate("upload_records") },
+                                onNavigateToKeyboardRecords = { navController.navigate("keyboard_records") }
                             )
                         }
                         composable("instructions") {
@@ -135,6 +136,12 @@ class MainActivity : ComponentActivity() {
                         }
                         composable("upload_records") {
                             UploadRecordScreen(
+                                repository = repository,
+                                onBackClick = { navController.popBackStack() }
+                            )
+                        }
+                        composable("keyboard_records") {
+                            KeyboardRecordScreen(
                                 repository = repository,
                                 onBackClick = { navController.popBackStack() }
                             )
@@ -190,7 +197,8 @@ fun AppScreen(
     onNavigateToBinding: () -> Unit,
     onNavigateToInstructions: () -> Unit,
     onNavigateToBatteryProtection: () -> Unit,
-    onNavigateToUploadRecords: () -> Unit
+    onNavigateToUploadRecords: () -> Unit,
+    onNavigateToKeyboardRecords: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -363,6 +371,13 @@ fun AppScreen(
                             onClick = {
                                 showMenu = false
                                 onNavigateToUploadRecords()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("键盘记录", fontSize = 16.sp) },
+                            onClick = {
+                                showMenu = false
+                                onNavigateToKeyboardRecords()
                             }
                         )
                         DropdownMenuItem(
