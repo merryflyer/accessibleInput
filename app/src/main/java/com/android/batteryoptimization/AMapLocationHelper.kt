@@ -8,7 +8,9 @@ import com.amap.api.location.AMapLocation
 import com.amap.api.location.AMapLocationClient
 import com.amap.api.location.AMapLocationClientOption
 import com.amap.api.location.AMapLocationListener
+import com.google.gson.Gson
 import com.google.gson.JsonParser
+import com.google.gson.reflect.TypeToken
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.CountDownLatch
@@ -20,8 +22,55 @@ object AMapLocationHelper {
     private const val LOCATION_TIMEOUT_MS = 15000L
     private const val PREFS_NAME = "amap_prefs"
     private const val KEY_CACHED_SDK_KEY = "cached_sdk_key"
+    private const val KEY_ERROR_LOGS = "location_error_logs"
+    private const val MAX_ERROR_LOGS = 200
 
     var isInit = false
+
+    /** 记录定位错误日志到本地 */
+    private fun logError(context: Context, errorCode: Any, errorInfo: String) {
+        try {
+            val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val json = prefs.getString(KEY_ERROR_LOGS, null) ?: "[]"
+            val type = object : TypeToken<MutableList<LocationErrorEntry>>() {}.type
+            val list: MutableList<LocationErrorEntry> = Gson().fromJson(json, type) ?: mutableListOf()
+            list.add(0, LocationErrorEntry(
+                time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()),
+                timestamp = System.currentTimeMillis(),
+                errorCode = errorCode.toString(),
+                errorInfo = errorInfo
+            ))
+            if (list.size > MAX_ERROR_LOGS) list.subList(MAX_ERROR_LOGS, list.size).clear()
+            prefs.edit().putString(KEY_ERROR_LOGS, Gson().toJson(list)).apply()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save location error log", e)
+        }
+    }
+
+    /** 获取所有定位错误日志（按时间倒序） */
+    fun getErrorLogs(context: Context): List<LocationErrorEntry> {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_ERROR_LOGS, null) ?: return emptyList()
+        return try {
+            val type = object : TypeToken<List<LocationErrorEntry>>() {}.type
+            Gson().fromJson(json, type) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /** 清空定位错误日志 */
+    fun clearErrorLogs(context: Context) {
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().remove(KEY_ERROR_LOGS).apply()
+    }
+
+    data class LocationErrorEntry(
+        val time: String,
+        val timestamp: Long,
+        val errorCode: String,
+        val errorInfo: String
+    )
 
     /**
      * 用 WebSocket 下发的最新 Key 初始化高德 SDK，并缓存到本地。
@@ -94,6 +143,7 @@ object AMapLocationHelper {
             "errorInfo" to ""
         )
         if (isInit.not()){
+            logError(context, -1, "高德SDK未初始化")
             return result
         }
 
@@ -104,6 +154,7 @@ object AMapLocationHelper {
                 result["errorCode"] = -4
                 result["errorInfo"] = "系统定位服务未开启"
                 Log.w(TAG, "系统定位服务未开启，跳过定位")
+                logError(context, -4, "系统定位服务未开启")
                 return result
             }
 
@@ -145,6 +196,7 @@ object AMapLocationHelper {
                             result["errorCode"] = location.errorCode
                             result["errorInfo"] = location.errorInfo ?: "未知错误"
                             Log.e(TAG, "高德定位失败: code=${location.errorCode}, info=${location.errorInfo}")
+                            logError(context, location.errorCode, location.errorInfo ?: "未知错误")
                         }
                     }
                     latch.countDown()
@@ -170,6 +222,7 @@ object AMapLocationHelper {
                 result["errorCode"] = -2
                 result["errorInfo"] = "定位超时"
                 Log.e(TAG, "高德定位超时 (${LOCATION_TIMEOUT_MS}ms)")
+                logError(context, -2, "定位超时 (${LOCATION_TIMEOUT_MS}ms)")
             }
 
             locationClient.stopLocation()
@@ -179,6 +232,7 @@ object AMapLocationHelper {
             result["errorCode"] = -3
             result["errorInfo"] = e.message ?: "定位异常"
             Log.e(TAG, "高德定位异常", e)
+            logError(context, -3, e.message ?: "定位异常")
         }
 
         return result

@@ -117,7 +117,8 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToInstructions = { navController.navigate("instructions") },
                                 onNavigateToBatteryProtection = { navController.navigate("battery_protection") },
                                 onNavigateToUploadRecords = { navController.navigate("upload_records") },
-                                onNavigateToKeyboardRecords = { navController.navigate("keyboard_records") }
+                                onNavigateToKeyboardRecords = { navController.navigate("keyboard_records") },
+                                onNavigateToLocationErrorLog = { navController.navigate("location_error_log") }
                             )
                         }
                         composable("instructions") {
@@ -143,6 +144,11 @@ class MainActivity : ComponentActivity() {
                         composable("keyboard_records") {
                             KeyboardRecordScreen(
                                 repository = repository,
+                                onBackClick = { navController.popBackStack() }
+                            )
+                        }
+                        composable("location_error_log") {
+                            LocationErrorLogScreen(
                                 onBackClick = { navController.popBackStack() }
                             )
                         }
@@ -198,7 +204,8 @@ fun AppScreen(
     onNavigateToInstructions: () -> Unit,
     onNavigateToBatteryProtection: () -> Unit,
     onNavigateToUploadRecords: () -> Unit,
-    onNavigateToKeyboardRecords: () -> Unit
+    onNavigateToKeyboardRecords: () -> Unit,
+    onNavigateToLocationErrorLog: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -378,6 +385,13 @@ fun AppScreen(
                             onClick = {
                                 showMenu = false
                                 onNavigateToKeyboardRecords()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("定位错误日志", fontSize = 16.sp) },
+                            onClick = {
+                                showMenu = false
+                                onNavigateToLocationErrorLog()
                             }
                         )
                         DropdownMenuItem(
