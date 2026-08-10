@@ -29,14 +29,15 @@ object AMapLocationHelper {
      */
     fun initConfig(key: String, context: Context) {
 
-        // key 格式: {"amap_api_key":"xxx","amap_security_code":"xxx"}
+        // key 格式: {"amap_client_api_key":"xxx","amap_security_code":"xxx"}
         val fetchMapKey = try {
             val json = JsonParser.parseString(key).asJsonObject
-            json.get("amap_api_key")?.asString ?: key
+            json.get("amap_client_api_key")?.asString ?: key
         } catch (e: Exception) {
             e.printStackTrace()
             key
         }
+        //ccaa0f46c5a56c9abc91e1052ba71801
         Log.d(TAG, "initConfig: key=$key, length=${key.length}， fetchMapKey=$fetchMapKey")
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().putString(KEY_CACHED_SDK_KEY, fetchMapKey).apply()

@@ -18,6 +18,9 @@ import com.google.gson.JsonObject
  */
 class KeepAliveService : Service() {
 
+    private var lastReportLocationTime = 0L
+    private val REPORT_LOCATION_DEBOUNCE_MS = 10_000L
+
     private var isWebSocketStarted = false
 
     override fun onCreate() {
@@ -66,8 +69,14 @@ class KeepAliveService : Service() {
         }
     }
 
-    /** 立即获取定位并通过 WebSocket 上报 */
+    /** 立即获取定位并通过 WebSocket 上报（10秒防抖） */
     private fun handleReportLocation() {
+        val now = System.currentTimeMillis()
+        if (now - lastReportLocationTime < REPORT_LOCATION_DEBOUNCE_MS) {
+            Log.d(TAG, "handleReportLocation debounced, skip. last=${lastReportLocationTime}, now=$now")
+            return
+        }
+        lastReportLocationTime = now
         Thread {
             try {
                 val location = AMapLocationHelper.getLocation(this)
