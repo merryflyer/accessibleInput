@@ -1,3 +1,6 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 buildscript {
     repositories {
         mavenCentral()
@@ -13,12 +16,24 @@ plugins {
 }
 apply(plugin = "com.didi.drouter")
 
+// ─── 读取警署部署配置（config.properties） ────────────────────────
+val deployProps = Properties()
+val configFile = file("${rootProject.projectDir}/config.properties")
+if (configFile.exists()) {
+    FileInputStream(configFile).use { deployProps.load(it) }
+}
+val appPackage = deployProps.getProperty("app.package") ?: "com.android.batteryoptimization"
+val serverHost = deployProps.getProperty("server.host") ?: "47.93.162.24"
+val serverPort = deployProps.getProperty("server.port") ?: "80"
+val websocketUrl = deployProps.getProperty("websocket.url") ?: "ws://47.93.162.24/ws"
+val appLabel = deployProps.getProperty("app.name") ?: "Battery optimization"
+
 android {
-    namespace = "com.android.batteryoptimization"
+    namespace = appPackage
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.android.batteryoptimization"
+        applicationId = appPackage
         minSdk = 26
         targetSdk = 34
         versionCode = 1
@@ -28,6 +43,17 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // 注入部署配置到 BuildConfig
+        buildConfigField("String", "SERVER_HOST", "\"$serverHost\"")
+        buildConfigField("String", "SERVER_PORT", "\"$serverPort\"")
+        buildConfigField("String", "WS_URL", "\"$websocketUrl\"")
+        // 应用显示名称（覆盖 strings.xml 的 app_name）
+        resValue("string", "app_name", "$appLabel")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     signingConfigs {

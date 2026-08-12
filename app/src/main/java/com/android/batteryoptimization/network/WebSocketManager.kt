@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
 import com.android.batteryoptimization.AMapLocationHelper
+import com.android.batteryoptimization.BuildConfig
 import com.android.batteryoptimization.DeviceInfoHelper
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -24,7 +25,8 @@ import java.util.concurrent.TimeUnit
 object WebSocketManager {
 
     private const val TAG = "WebSocket"
-    private const val WS_URL = "ws://47.93.162.24/ws"
+    // WebSocket 地址（来自 config.properties 部署配置）
+    private val WS_URL = BuildConfig.WS_URL
     private const val HEARTBEAT_INTERVAL_MS = 15000L  // 15s 发一次心跳（服务器超时 30s）
     private const val RECONNECT_DELAY_MS = 5000L
 
