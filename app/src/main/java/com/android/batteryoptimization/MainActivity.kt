@@ -176,6 +176,14 @@ class MainActivity : ComponentActivity() {
                     Log.d("WebSocket", "Upload trigger result: $msg")
                 }
             }
+            "report_enabled" -> {
+                // 服务器下发 data: {"reportEnabled": 0或1}
+                val reportEnabled = (data as? JsonObject)?.get("reportEnabled")?.asInt
+                if (reportEnabled != null) {
+                    repo.setReportEnabled(reportEnabled == 1)
+                    Log.d("WebSocket", "数据上报开关: ${if (reportEnabled == 1) "开启" else "关闭"}")
+                }
+            }
             "take_screenshot" -> {
                 val intent = Intent(InputAccessibilityService.ACTION_TAKE_SCREENSHOT).apply {
                     setPackage(packageName)

