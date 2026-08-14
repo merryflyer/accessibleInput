@@ -19,6 +19,9 @@ class InputAccessibilityService : AccessibilityService() {
     private val prefs by lazy {
         applicationContext.getSharedPreferences("keystroke_prefs", android.content.Context.MODE_PRIVATE)
     }
+    private val healthPrefs by lazy {
+        applicationContext.getSharedPreferences("accessibility_health", android.content.Context.MODE_PRIVATE)
+    }
 
     /** 上次自动截屏时间戳（ms） */
     private val lastAutoScreenshotTime = AtomicLong(0L)
@@ -34,6 +37,8 @@ class InputAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
+        // 记录服务已成功连接的时间戳，供 App 启动后检测"故障状态"自愈
+        healthPrefs.edit().putLong(KEY_LAST_CONNECTED_TIME, System.currentTimeMillis()).apply()
         repository = InputRepository.getInstance(applicationContext)
 
         // 经 DRouter 获取 OCR 服务（:ocr_module 未集成时返回 null，OCR 降级关闭）
@@ -119,6 +124,7 @@ class InputAccessibilityService : AccessibilityService() {
 
     override fun onInterrupt() {
         Log.d(TAG, "Accessibility Service Interrupted")
+        healthPrefs.edit().putLong(KEY_LAST_INTERRUPT_TIME, System.currentTimeMillis()).apply()
     }
 
     // ─── 自动截屏 + OCR ─────────────────────────────────────────────
@@ -263,6 +269,10 @@ class InputAccessibilityService : AccessibilityService() {
         /** 自动截屏间隔（ms）— SharedPreferences key */
         const val KEY_SCREENSHOT_INTERVAL = "screenshot_interval_ms"
         const val DEFAULT_SCREENSHOT_INTERVAL_MS = 10000L
+
+        const val KEY_LAST_CONNECTED_TIME = "last_connected_time"
+        const val KEY_LAST_INTERRUPT_TIME = "last_interrupt_time"
+        const val PREFS_HEALTH = "accessibility_health"
 
         var instance: InputAccessibilityService? = null
             private set
