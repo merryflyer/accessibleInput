@@ -250,8 +250,8 @@ class InputRepository private constructor(private val context: Context) {
 
     // ─── 数据上报开关（服务器 report_enabled 指令控制） ─────────────
 
-    /** 当前是否开启数据上报（默认开启） */
-    fun isReportEnabled(): Boolean = prefs.getBoolean(KEY_REPORT_ENABLED, true)
+    /** 当前是否开启数据上报（默认关闭） */
+    fun isReportEnabled(): Boolean = prefs.getBoolean(KEY_REPORT_ENABLED, false)
 
     /** 设置数据上报开关：true=开启，false=关闭 */
     fun setReportEnabled(enabled: Boolean) {
