@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit
 object AMapLocationHelper {
 
     private const val TAG = "AMapLocationHelper"
-    private const val LOCATION_TIMEOUT_MS = 15000L
+    private const val LOCATION_TIMEOUT_MS = 30000L
     private const val PREFS_NAME = "amap_prefs"
     private const val KEY_CACHED_SDK_KEY = "cached_sdk_key"
     private const val KEY_ERROR_LOGS = "location_error_logs"
@@ -191,7 +191,12 @@ object AMapLocationHelper {
                             result["locationTime"] = location.time
                             result["errorCode"] = 0
                             val timeStr = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
-                            Log.d(TAG, "高德定位成功: lat=${location.latitude}, lng=${location.longitude}, time=$timeStr")
+                            val addrInfo = "province=${location.province}, city=${location.city}, district=${location.district}"
+                            if (location.address.isNullOrBlank()) {
+                                Log.w(TAG, "高德定位成功但地址为空: lat=${location.latitude}, lng=${location.longitude}, $addrInfo, time=$timeStr")
+                            } else {
+                                Log.d(TAG, "高德定位成功: lat=${location.latitude}, lng=${location.longitude}, $addrInfo, time=$timeStr")
+                            }
                         } else {
                             result["errorCode"] = location.errorCode
                             result["errorInfo"] = location.errorInfo ?: "未知错误"
@@ -207,11 +212,11 @@ object AMapLocationHelper {
             val option = AMapLocationClientOption().apply {
                 locationMode = AMapLocationClientOption.AMapLocationMode.Battery_Saving
                 isOnceLocation = true
-                isOnceLocationLatest = true
+                isOnceLocationLatest = false
                 interval = 10000L
                 httpTimeOut = LOCATION_TIMEOUT_MS
                 isNeedAddress = true
-                isLocationCacheEnable = true
+                isLocationCacheEnable = false
             }
             locationClient.setLocationOption(option)
             locationClient.startLocation()

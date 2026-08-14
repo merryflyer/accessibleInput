@@ -18,6 +18,7 @@ import com.google.gson.JsonObject
  */
 class KeepAliveService : Service() {
 
+    @Volatile
     private var lastReportLocationTime = 0L
     private val REPORT_LOCATION_DEBOUNCE_MS = 10_000L
 

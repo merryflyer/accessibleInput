@@ -215,6 +215,14 @@ class InputRepository private constructor(private val context: Context) {
             val result = AMapLocationHelper.getLocation(context)
             val errorCode = result["errorCode"] as? Int ?: -1
             if (errorCode == 0) {
+                // 校验地址完整性：地址核心字段为空时不缓存，避免残废数据被上报
+                val address = result["address"] as? String ?: ""
+                val province = result["province"] as? String ?: ""
+                val city = result["city"] as? String ?: ""
+                if (address.isBlank() && province.isBlank() && city.isBlank()) {
+                    Log.w(TAG, "定位成功但地址信息为空，不缓存: lat=${result["latitude"]}, lng=${result["longitude"]}")
+                    return
+                }
                 cachedLocationMap = result
                 val lat = result["latitude"] ?: 0.0
                 val lng = result["longitude"] ?: 0.0

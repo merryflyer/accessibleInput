@@ -18,3 +18,10 @@ apks/
 # OCR model files (large, downloaded separately)
 app/src/main/assets/models/**/*.nb
 app/src/main/assets/models/**/*.tar
+
+# Module build outputs
+ocr_api/build/
+ocr_module/build/
+
+# WorkBuddy project memory/data (not source)
+.workbuddy/
