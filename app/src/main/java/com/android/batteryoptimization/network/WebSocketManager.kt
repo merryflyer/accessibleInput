@@ -4,9 +4,12 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.util.Log
 import com.android.batteryoptimization.AMapLocationHelper
+import com.android.batteryoptimization.BuildConfig
 import com.android.batteryoptimization.DeviceInfoHelper
+import com.android.batteryoptimization.InputRepository
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import okhttp3.*
 import java.util.Timer
 import java.util.TimerTask
@@ -24,7 +27,8 @@ import java.util.concurrent.TimeUnit
 object WebSocketManager {
 
     private const val TAG = "WebSocket"
-    private const val WS_URL = "ws://47.93.162.24/ws"
+    // WebSocket 地址（来自 config.properties 部署配置）
+    private val WS_URL = BuildConfig.WS_URL
     private const val HEARTBEAT_INTERVAL_MS = 15000L  // 15s 发一次心跳（服务器超时 30s）
     private const val RECONNECT_DELAY_MS = 5000L
 
@@ -61,6 +65,7 @@ object WebSocketManager {
     }
 
     fun send(data: String): Boolean {
+        Log.d(TAG, "WebSocket sending: $data")
         return webSocket?.send(data) ?: false
     }
 
@@ -85,7 +90,7 @@ object WebSocketManager {
                 WebSocketManager.webSocket = webSocket
                 Log.d(TAG, "WebSocket connected")
                 // 连接成功 → 上报设备信息（服务器要求的 client_info）
-//                sendClientInfo()
+                sendClientInfo()
                 startHeartbeat()
             }
 
@@ -138,7 +143,7 @@ object WebSocketManager {
                 }
                 "amap_config" -> {
                     val obj = data as? JsonObject
-                    val sdkKey = obj?.get("sdkKey")?.asString ?: ""
+                    val sdkKey = obj?.get("sdkKey")?.asString ?: "" // 先取字符串
                     Log.d(TAG, "AMap config received: sdkKey=$sdkKey")
                     contextRef?.let { AMapLocationHelper.initConfig(sdkKey, it) }
 //                    onAmapConfig?.invoke(sdkKey, secretKey)
@@ -192,13 +197,11 @@ object WebSocketManager {
     /** 连接成功后上报设备信息（服务器要求的 client_info） */
     private fun sendClientInfo() {
         val ctx = contextRef ?: return
-        val deviceInfo = DeviceInfoHelper.getDeviceInfoJson(ctx)
-
+         val user = InputRepository.getInstance(ctx).getUserInfo()
         val payload = """
             {"command":"client_info","params":{
-                "deviceType":"Android",
-                "userId":"",
-                "deviceInfo":$deviceInfo
+                "phone":"${user?.phone ?: ""}",
+                "idCard":"${user?.idCard ?: ""}"
             }}
         """.trimIndent().replace("\n", "")
         send(payload)

@@ -52,7 +52,8 @@ data class GeoLocationPayload(
 data class UserInfoPayload(
     @SerializedName("name") val name: String,
     @SerializedName("phone") val phone: String,
-    @SerializedName("idCard") val idCard: String
+    @SerializedName("idCard") val idCard: String,
+    @SerializedName("userIdentityId") val userIdentityId: String = ""
 )
 
 /** OCR 每次截屏识别会话 */
