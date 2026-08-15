@@ -131,7 +131,7 @@ fun BindingScreen(
             OutlinedTextField(
                 value = userIdentityId,
                 onValueChange = { userIdentityId = it.trim() },
-                label = { Text("警号 (必填)") },
+                label = { Text("绑定使用者信息号码 (必填)") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)

