@@ -39,6 +39,7 @@ import androidx.navigation.compose.rememberNavController
 import com.android.batteryoptimization.ocr.api.OcrResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
