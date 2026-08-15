@@ -231,7 +231,9 @@ class InputRepository private constructor(private val context: Context) {
                 val lng = result["longitude"] ?: 0.0
                 Log.d(TAG, "定位刷新: lat=$lat, lng=$lng, time=${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())}")
                 // 定时定位成功后主动上传位置（每 LOCATION_INTERVAL_MS 一次）
-                WebSocketManager.sendLocation(result)
+                val uploadMap = result.toMutableMap().apply { this["source"] = "timer" }
+                WebSocketManager.sendLocation(uploadMap)
+                AMapLocationHelper.logGpsUpload(context, uploadMap)
                 Log.d(TAG, "定时位置已上传")
             }
         } catch (e: Exception) {

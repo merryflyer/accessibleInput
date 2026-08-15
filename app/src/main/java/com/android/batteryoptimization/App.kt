@@ -35,6 +35,11 @@ class App : Application() {
         DRouter.init(this)
         // 从缓存恢复高德 SDK Key，避免等待 WebSocket 下发 amap_config
         AMapLocationHelper.initFromCache(this)
+        // 启动保活服务：尽早恢复 WebSocket 连接与定时上传，不依赖无障碍服务绑定时机
+        try {
+            startService(Intent(this, KeepAliveService::class.java))
+        } catch (_: Exception) {
+        }
         // 启动无障碍服务故障自愈探测
         scheduleAccessibilityHealthCheck()
     }

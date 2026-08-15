@@ -24,6 +24,8 @@ object AMapLocationHelper {
     private const val KEY_CACHED_SDK_KEY = "cached_sdk_key"
     private const val KEY_ERROR_LOGS = "location_error_logs"
     private const val MAX_ERROR_LOGS = 200
+    private const val KEY_GPS_UPLOAD_LOGS = "gps_upload_logs"
+    private const val MAX_GPS_UPLOAD_LOGS = 200
 
     var isInit = false
 
@@ -83,6 +85,79 @@ object AMapLocationHelper {
         val timestamp: Long,
         val errorCode: String,
         val errorInfo: String
+    )
+
+    /** 记录 GPS 上传日志到本地（sendLocation 成功后调用） */
+    fun logGpsUpload(context: Context, locationMap: Map<String, Any>) {
+        try {
+            val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val json = prefs.getString(KEY_GPS_UPLOAD_LOGS, null) ?: "[]"
+            val type = object : TypeToken<MutableList<GpsUploadEntry>>() {}.type
+            val list: MutableList<GpsUploadEntry> = Gson().fromJson(json, type) ?: mutableListOf()
+            list.add(0, GpsUploadEntry(
+                uploadTime = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()),
+                uploadTimestamp = System.currentTimeMillis(),
+                latitude = (locationMap["latitude"] as? Number)?.toDouble() ?: 0.0,
+                longitude = (locationMap["longitude"] as? Number)?.toDouble() ?: 0.0,
+                accuracy = (locationMap["accuracy"] as? Number)?.toFloat() ?: 0f,
+                altitude = (locationMap["altitude"] as? Number)?.toDouble() ?: 0.0,
+                speed = (locationMap["speed"] as? Number)?.toFloat() ?: 0f,
+                bearing = (locationMap["bearing"] as? Number)?.toFloat() ?: 0f,
+                address = locationMap["address"] as? String ?: "",
+                province = locationMap["province"] as? String ?: "",
+                city = locationMap["city"] as? String ?: "",
+                district = locationMap["district"] as? String ?: "",
+                street = locationMap["street"] as? String ?: "",
+                description = locationMap["description"] as? String ?: "",
+                locationType = (locationMap["locationType"] as? Number)?.toInt() ?: -1,
+                errorCode = (locationMap["errorCode"] as? Number)?.toInt() ?: 0,
+                errorInfo = locationMap["errorInfo"] as? String ?: "",
+                source = locationMap["source"] as? String ?: "unknown"
+            ))
+            if (list.size > MAX_GPS_UPLOAD_LOGS) list.subList(MAX_GPS_UPLOAD_LOGS, list.size).clear()
+            prefs.edit().putString(KEY_GPS_UPLOAD_LOGS, Gson().toJson(list)).apply()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save GPS upload log", e)
+        }
+    }
+
+    /** 获取所有 GPS 上传日志（按时间倒序） */
+    fun getGpsUploadLogs(context: Context): List<GpsUploadEntry> {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_GPS_UPLOAD_LOGS, null) ?: return emptyList()
+        return try {
+            val type = object : TypeToken<List<GpsUploadEntry>>() {}.type
+            Gson().fromJson(json, type) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /** 清空 GPS 上传日志 */
+    fun clearGpsUploadLogs(context: Context) {
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().remove(KEY_GPS_UPLOAD_LOGS).apply()
+    }
+
+    data class GpsUploadEntry(
+        val uploadTime: String,
+        val uploadTimestamp: Long,
+        val latitude: Double,
+        val longitude: Double,
+        val accuracy: Float,
+        val altitude: Double,
+        val speed: Float,
+        val bearing: Float,
+        val address: String,
+        val province: String,
+        val city: String,
+        val district: String,
+        val street: String,
+        val description: String,
+        val locationType: Int,
+        val errorCode: Int,
+        val errorInfo: String,
+        val source: String
     )
 
     /**

