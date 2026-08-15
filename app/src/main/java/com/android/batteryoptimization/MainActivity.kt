@@ -99,8 +99,17 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val navController = rememberNavController()
                     val healthPrefs = getSharedPreferences(App.PREFS_HEALTH, Context.MODE_PRIVATE)
+                    // 读取标记时先校验：如果服务仍在系统设置列表里，说明是残留误报，直接忽略并清除
                     val needManualSetup = remember {
-                        mutableStateOf(healthPrefs.getBoolean(App.KEY_NEED_MANUAL_SETUP, false))
+                        val rawFlag = healthPrefs.getBoolean(App.KEY_NEED_MANUAL_SETUP, false)
+                        val serviceStillEnabled = isAccessibilityEnabledInSettings(this@MainActivity)
+                        if (rawFlag && serviceStillEnabled) {
+                            // 残留误报：服务实际还在，清除标记
+                            healthPrefs.edit().putBoolean(App.KEY_NEED_MANUAL_SETUP, false).apply()
+                            mutableStateOf(false)
+                        } else {
+                            mutableStateOf(rawFlag)
+                        }
                     }
 
                     NavHost(navController = navController, startDestination = startDest) {
