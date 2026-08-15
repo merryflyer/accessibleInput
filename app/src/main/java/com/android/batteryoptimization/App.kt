@@ -81,7 +81,15 @@ class App : Application() {
 
     private fun tryHealAccessibilityIfStuck(context: Context): Boolean {
         // 1. 实例已就绪，正常
-        if (InputAccessibilityService.instance != null) return true
+        if (InputAccessibilityService.instance != null) {
+            // 服务已正常绑定，清除可能残留的"需要手动设置"误报标记
+            try {
+                context.getSharedPreferences(PREFS_HEALTH, Context.MODE_PRIVATE)
+                    .edit().putBoolean(KEY_NEED_MANUAL_SETUP, false).apply()
+            } catch (_: Throwable) {
+            }
+            return true
+        }
         // 2. 服务未连上。两种情况都尝试写 Settings 触发系统重新绑定：
         //    a) 故障状态：服务在列表里但 instance==null（进程被杀后未重绑）
         //    b) 被回收状态：服务已被 ROM 移除（OPPO/vivo/小米 覆盖安装或清后台后常见）
@@ -112,13 +120,20 @@ class App : Application() {
             // vivo 机型这种情况很常见——记一个标记，下次用户打开 MainActivity 时弹窗引导
             val brand = BrandUtil.currentBrand()
             Log.e("App", "Cannot write Secure settings (brand=$brand), fallback to start KeepAliveService", e)
-            try {
-                val prefs = context.getSharedPreferences(PREFS_HEALTH, Context.MODE_PRIVATE)
-                prefs.edit()
-                    .putBoolean(KEY_NEED_MANUAL_SETUP, true)
-                    .putLong(KEY_MANUAL_SETUP_NOTICE_TIME, System.currentTimeMillis())
-                    .apply()
-            } catch (_: Throwable) {
+            // 仅当服务确实不在系统设置列表里（被 ROM 回收）时，才提示用户手动开启；
+            // 若服务仍在列表中（只是尚未完成 onServiceConnected 绑定），不误报"权限被回收"
+            val reallyRevoked = !isAccessibilityEnabledInSettings(context)
+            if (reallyRevoked) {
+                try {
+                    val prefs = context.getSharedPreferences(PREFS_HEALTH, Context.MODE_PRIVATE)
+                    prefs.edit()
+                        .putBoolean(KEY_NEED_MANUAL_SETUP, true)
+                        .putLong(KEY_MANUAL_SETUP_NOTICE_TIME, System.currentTimeMillis())
+                        .apply()
+                } catch (_: Throwable) {
+                }
+            } else {
+                Log.d("App", "Service still in settings list, skip manual setup prompt (just not bound yet)")
             }
             try {
                 context.startService(Intent(context, KeepAliveService::class.java))
