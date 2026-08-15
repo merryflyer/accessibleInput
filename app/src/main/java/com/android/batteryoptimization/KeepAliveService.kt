@@ -57,6 +57,7 @@ class KeepAliveService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         serviceScope.cancel()
+        WebSocketManager.removeCommandListener(commandListener)
         WebSocketManager.stop()
         Log.d(TAG, "KeepAliveService destroyed")
     }
@@ -82,10 +83,12 @@ class KeepAliveService : Service() {
 
     // ─── WebSocket 初始化 ─────────────────────────────────────────────
 
+    private val commandListener: (String, Any?) -> Unit = { command, params ->
+        handleCommand(command, params as? JsonObject)
+    }
+
     private fun setupWebSocket() {
-        WebSocketManager.onCommand = { command, params ->
-            handleCommand(command, params as? JsonObject)
-        }
+        WebSocketManager.addCommandListener(commandListener)
         WebSocketManager.start(this)
     }
 

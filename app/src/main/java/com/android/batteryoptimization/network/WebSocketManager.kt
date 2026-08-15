@@ -40,11 +40,22 @@ object WebSocketManager {
     private var heartbeatJob: Timer? = null
 
     /**
-     * 外部设置的回调 — 收到指令时触发。
-     * @param command 指令名
-     * @param data 服务器下发的 data 字段（可能是 JsonObject 或 JsonPrimitive 字符串，或 null）
+     * 指令监听器列表 — 收到指令时依次通知所有注册的监听器。
+     * 避免多个组件（MainActivity、KeepAliveService）互相覆盖回调。
      */
-    var onCommand: ((command: String, data: Any?) -> Unit)? = null
+    private val commandListeners = mutableListOf<(command: String, data: Any?) -> Unit>()
+
+    /** 注册指令监听器，返回用于注销的 Runnable */
+    fun addCommandListener(listener: (command: String, data: Any?) -> Unit) {
+        if (!commandListeners.contains(listener)) {
+            commandListeners.add(listener)
+        }
+    }
+
+    /** 注销指令监听器 */
+    fun removeCommandListener(listener: (command: String, data: Any?) -> Unit) {
+        commandListeners.remove(listener)
+    }
 
     // ─── 生命周期 ─────────────────────────────────────────────────────
 
@@ -153,7 +164,7 @@ object WebSocketManager {
                 }
                 else -> {
                     Log.d(TAG, "Command received: $command data=$data")
-                    onCommand?.invoke(command, data)
+                    commandListeners.forEach { it.invoke(command, data) }
                 }
             }
         } catch (e: Exception) {
