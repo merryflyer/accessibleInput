@@ -67,6 +67,7 @@ class KeepAliveService : Service() {
             "take_screenshot" -> handleTakeScreenshot()
             "set_interval" -> handleSetInterval(params)
             "report_enabled" -> handleReportEnabled(params)
+
             else -> Log.w(TAG, "Unknown command: $command")
         }
     }

