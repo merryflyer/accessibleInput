@@ -22,6 +22,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -29,18 +31,33 @@ fun InstructionScreen(onBackClick: () -> Unit) {
     val context = LocalContext.current
     val brand = remember { BrandUtil.currentBrand() }
 
-    // Live status checks - refresh on resume
-    var isAccessibilityEnabled by remember { mutableStateOf(checkAccessibilityPermission(context)) }
+    // 与监控开关一致：同时检查系统设置列表 + 服务实例绑定
+    var isServiceEnabled by remember { mutableStateOf(isAccessibilityEnabledInSettings(context)) }
+    var isServiceConnected by remember { mutableStateOf(isServiceInstanceReady()) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                isAccessibilityEnabled = checkAccessibilityPermission(context)
+                isServiceEnabled = isAccessibilityEnabledInSettings(context)
+                isServiceConnected = isServiceInstanceReady()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
+
+    // 服务在系统列表里但实例未绑定时，每 3 秒轮询，直到绑定成功
+    LaunchedEffect(isServiceEnabled, isServiceConnected) {
+        if (isServiceEnabled && !isServiceConnected) {
+            while (isActive) {
+                delay(3000)
+                if (isServiceInstanceReady()) {
+                    isServiceConnected = true
+                    break
+                }
+            }
         }
     }
 
@@ -75,12 +92,12 @@ fun InstructionScreen(onBackClick: () -> Unit) {
                 style = MaterialTheme.typography.bodyLarge
             )
 
-            // ① 辅助功能（通用）
+            // ① 辅助功能（通用）— 与监控开关一致：同时检查系统设置 + 服务实例绑定
             InstructionItem(
                 title = "1. 开启辅助功能权限（必选）",
                 description = "应用依赖此权限工作。若被系统回收，重新打开 App 会自动尝试恢复，仍不行时请重新开启。",
                 buttonText = "去开启辅助功能",
-                isEnabled = isAccessibilityEnabled,
+                isEnabled = isServiceEnabled && isServiceConnected,
                 onClick = {
                     context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
                 }
