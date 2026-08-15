@@ -67,10 +67,10 @@ android {
 
     buildTypes {
         release {
-            // 调试用：打开 debuggable + 关闭代码/资源混淆，方便断点排查
-            isDebuggable = true
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // 正式发布：关闭 debuggable + 开启代码/资源混淆
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

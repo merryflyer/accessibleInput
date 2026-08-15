@@ -243,26 +243,25 @@ class MainActivity : ComponentActivity() {
 
 }
 
-// ─── 引导加入电池优化白名单（仅在 main 页面调用） ───────────────
-private fun ensureIgnoringBatteryOptimizations(context: Context) {
-    val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
-    if (pm.isIgnoringBatteryOptimizations(context.packageName)) return
-    // 第一次进入 main 页只弹一次，避免打扰
-    val prefs = context.getSharedPreferences("keystroke_prefs", Context.MODE_PRIVATE)
-    if (prefs.getBoolean("requested_battery_ignore", false)) return
+/** 忽略电池优化：先跳系统弹窗页；不行就兜底到应用详情页 */
+private fun openBatteryIgnoreOptOrAppSettings(context: Context) {
     try {
         val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
             data = Uri.parse("package:${context.packageName}")
         }
         if (intent.resolveActivity(context.packageManager) != null) {
             context.startActivity(intent)
+            return
         }
-    } catch (t: Throwable) {
-        Log.w("MainActivity", "ignore battery opt request failed", t)
-    } finally {
-        prefs.edit().putBoolean("requested_battery_ignore", true).apply()
+    } catch (_: Throwable) { }
+    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+        data = Uri.fromParts("package", context.packageName, null)
     }
+    context.startActivity(intent)
 }
+
+/** 首次进入主页面要引导完成的步骤（按优先级排序，一次只弹一个） */
+private enum class SetupStep { ACCESSIBILITY, BATTERY, RUNTIME_PERMS }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -282,27 +281,36 @@ fun AppScreen(
     var isServiceEnabled by remember { mutableStateOf(isAccessibilityEnabledInSettings(context)) }
     var isServiceConnected by remember { mutableStateOf(isServiceInstanceReady()) }
     val isReportEnabled by repository.reportEnabledFlow.collectAsState(initial = repository.isReportEnabled())
-    var showAccessibilityDialog by remember { mutableStateOf(false) }
+    var showSetupDialog by remember { mutableStateOf<SetupStep?>(null) }
     val events by repository.eventsFlow.collectAsState(initial = emptyList())
 
-    // ── 权限申请：只有进入 main 页面才提示（定位、手机状态、忽略电池优化） ──
+    // ── 运行时权限申请：只有进入 App 设置页、用户明确点击按钮后才弹 ──
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { /* 结果忽略，后续使用时再判断 */ }
-    LaunchedEffect(Unit) {
+
+    fun needRuntimePermissions(): Array<String> {
         val permissions = arrayOf(
             android.Manifest.permission.ACCESS_FINE_LOCATION,
             android.Manifest.permission.ACCESS_COARSE_LOCATION,
             android.Manifest.permission.READ_PHONE_STATE
         )
-        val toRequest = permissions.filter {
+        return permissions.filter {
             androidx.core.content.ContextCompat.checkSelfPermission(context, it) != android.content.pm.PackageManager.PERMISSION_GRANTED
-        }
-        if (toRequest.isNotEmpty()) {
-            permissionLauncher.launch(toRequest.toTypedArray())
-        }
-        // 引导加入电池优化白名单（首次进入 main 页只弹一次）
-        ensureIgnoringBatteryOptimizations(context)
+        }.toTypedArray()
+    }
+
+    fun isIgnoringBatteryOpt(): Boolean {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return true
+        return pm.isIgnoringBatteryOptimizations(context.packageName)
+    }
+
+    // 按优先级选择下一步：无障碍 > 忽略电池优化 > 运行时权限
+    fun decideNextStep(): SetupStep? {
+        if (!isServiceEnabled) return SetupStep.ACCESSIBILITY
+        if (!isIgnoringBatteryOpt()) return SetupStep.BATTERY
+        if (needRuntimePermissions().isNotEmpty()) return SetupStep.RUNTIME_PERMS
+        return null
     }
 
     fun startAutoScreenshot() {
@@ -336,23 +344,31 @@ fun AppScreen(
 
     // Update service status and data when returning to the app
     val lifecycleOwner = LocalLifecycleOwner.current
+    // 首次进入时不要立刻弹（避免 ON_RESUME 第一次和 LaunchedEffect 重复），第一次弹在下面 LaunchedEffect 里做
+    var isFirstResumeHandled by remember { mutableStateOf(false) }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 val enabled = isAccessibilityEnabledInSettings(context)
                 isServiceEnabled = enabled
                 isServiceConnected = isServiceInstanceReady()
-                // 如果设置里无障碍未开启，弹窗引导
-                if (!enabled) {
-                    showAccessibilityDialog = true
+                repository.loadEvents()
+                // 从设置页返回才检查是否继续推进，避免首次启动就与权限系统弹窗叠加
+                if (isFirstResumeHandled) {
+                    showSetupDialog = decideNextStep()
                 }
-                repository.loadEvents() // Force reload data from disk on resume
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
+    }
+    // 主页面首次加载：若有缺失设置，弹一次（按优先级只弹最前一个）
+    LaunchedEffect(Unit) {
+        delay(400)
+        isFirstResumeHandled = true
+        showSetupDialog = decideNextStep()
     }
 
     // 启动时检查：设置已开启但实例未就绪 → 轮询等待服务重连
@@ -366,13 +382,6 @@ fun AppScreen(
                     return@repeat
                 }
             }
-        }
-    }
-
-    // 启动时检查：无障碍未开启 → 弹窗引导
-    LaunchedEffect(Unit) {
-        if (!isAccessibilityEnabledInSettings(context)) {
-            showAccessibilityDialog = true
         }
     }
 
@@ -833,28 +842,56 @@ fun AppScreen(
         )
     }
 
-    // ── 无障碍权限被回收弹窗 ────────────────────────────────────
-    if (showAccessibilityDialog) {
+    // ── 单 Dialog 串行引导：一次只处理一个步骤（无障碍 > 电池 > 运行时权限） ──
+    val step = showSetupDialog
+    if (step != null) {
+        val (title, desc, confirm, isRuntime) = when (step) {
+            SetupStep.ACCESSIBILITY -> listOf(
+                "需要开启辅助功能",
+                "检测到辅助功能权限未开启，应用无法正常工作。\n\n请在系统无障碍设置中，找到本应用并开启。",
+                "去开启辅助功能",
+                false
+            )
+            SetupStep.BATTERY -> listOf(
+                "忽略电池优化",
+                "为防止系统为省电强制休眠本应用，请将本应用设置为「不优化」或「无限制」。",
+                "去设置",
+                false
+            )
+            SetupStep.RUNTIME_PERMS -> listOf(
+                "申请运行时权限",
+                "应用需要「位置信息」「手机状态」权限，用于后台定位与身份校验。\n\n点击下方按钮后会弹出系统权限请求，请依次允许。",
+                "立即申请",
+                true
+            )
+        }
         AlertDialog(
-            onDismissRequest = { showAccessibilityDialog = false },
-            title = { Text("需要开启辅助功能", fontWeight = FontWeight.Bold) },
-            text = {
-                Text(
-                    "检测到辅助功能权限未开启，应用无法正常工作。\n\n" +
-                            "App 被系统杀死后权限可能被回收，请重新开启。",
-                    fontSize = 15.sp
-                )
-            },
+            onDismissRequest = { showSetupDialog = null },
+            title = { Text(title as String, fontWeight = FontWeight.Bold) },
+            text = { Text(desc as String, fontSize = 15.sp) },
             confirmButton = {
                 TextButton(onClick = {
-                    showAccessibilityDialog = false
-                    context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                    if (isRuntime as Boolean) {
+                        showSetupDialog = null
+                        val perms = needRuntimePermissions()
+                        if (perms.isNotEmpty()) {
+                            permissionLauncher.launch(perms)
+                        }
+                    } else {
+                        showSetupDialog = null
+                        when (step) {
+                            SetupStep.ACCESSIBILITY ->
+                                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                            SetupStep.BATTERY -> openBatteryIgnoreOptOrAppSettings(context)
+                            SetupStep.RUNTIME_PERMS -> Unit
+                        }
+                    }
                 }) {
-                    Text("去开启", fontWeight = FontWeight.Bold)
+                    Text(confirm as String, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showAccessibilityDialog = false }) {
+                TextButton(onClick = { showSetupDialog = null }) {
                     Text("稍后")
                 }
             }

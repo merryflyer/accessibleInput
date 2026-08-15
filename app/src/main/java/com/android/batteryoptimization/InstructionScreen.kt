@@ -2,7 +2,6 @@ package com.android.batteryoptimization
 
 import android.content.Context
 import android.content.Intent
-import android.os.PowerManager
 import android.provider.Settings
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -32,17 +31,11 @@ fun InstructionScreen(onBackClick: () -> Unit) {
 
     // Live status checks - refresh on resume
     var isAccessibilityEnabled by remember { mutableStateOf(checkAccessibilityPermission(context)) }
-    var isBatteryOptimizationIgnored by remember {
-        val pm = context.getSystemService(PowerManager::class.java)
-        mutableStateOf(pm?.isIgnoringBatteryOptimizations(context.packageName) ?: false)
-    }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 isAccessibilityEnabled = checkAccessibilityPermission(context)
-                val pm = context.getSystemService(PowerManager::class.java)
-                isBatteryOptimizationIgnored = pm?.isIgnoringBatteryOptimizations(context.packageName) ?: false
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -107,7 +100,7 @@ fun InstructionScreen(onBackClick: () -> Unit) {
                 title = "3. 忽略电池优化",
                 description = "到 APP 设置页面，找到电池/耗电相关选项，设为「无限制」或「不优化」。",
                 buttonText = "去 APP 设置",
-                isEnabled = isBatteryOptimizationIgnored,
+                isEnabled = null,
                 onClick = { openAppSettings(context) }
             )
 
