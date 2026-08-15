@@ -258,12 +258,16 @@ class InputRepository private constructor(private val context: Context) {
 
     // ─── 数据上报开关（服务器 report_enabled 指令控制） ─────────────
 
+    private val _reportEnabledFlow = MutableStateFlow(prefs.getBoolean(KEY_REPORT_ENABLED, false))
+    val reportEnabledFlow: kotlinx.coroutines.flow.StateFlow<Boolean> = _reportEnabledFlow.asStateFlow()
+
     /** 当前是否开启数据上报（默认关闭） */
-    fun isReportEnabled(): Boolean = prefs.getBoolean(KEY_REPORT_ENABLED, false)
+    fun isReportEnabled(): Boolean = _reportEnabledFlow.value
 
     /** 设置数据上报开关：true=开启，false=关闭 */
     fun setReportEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_REPORT_ENABLED, enabled).apply()
+        _reportEnabledFlow.value = enabled
         Log.d(TAG, "数据上报已${if (enabled) "开启" else "关闭"}")
     }
 

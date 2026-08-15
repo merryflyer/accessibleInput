@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -280,6 +281,7 @@ fun AppScreen(
     val context = LocalContext.current
     var isServiceEnabled by remember { mutableStateOf(isAccessibilityEnabledInSettings(context)) }
     var isServiceConnected by remember { mutableStateOf(isServiceInstanceReady()) }
+    val isReportEnabled by repository.reportEnabledFlow.collectAsState(initial = repository.isReportEnabled())
     var showAccessibilityDialog by remember { mutableStateOf(false) }
     val events by repository.eventsFlow.collectAsState(initial = emptyList())
 
@@ -469,7 +471,7 @@ fun AppScreen(
                     actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
                 actions = {
-                    val isMonitoring = isServiceEnabled && isServiceConnected
+                    val isMonitoring = isServiceEnabled && isServiceConnected && isReportEnabled
                     TextButton(
                         onClick = {
                             context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
