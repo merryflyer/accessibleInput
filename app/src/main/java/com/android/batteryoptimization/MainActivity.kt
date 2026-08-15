@@ -2,12 +2,10 @@ package com.android.batteryoptimization
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.text.TextUtils
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import android.graphics.BitmapFactory
@@ -22,8 +20,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.collectAsState
@@ -40,13 +36,10 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.android.batteryoptimization.ocr.api.IOcrService
 import com.android.batteryoptimization.ocr.api.OcrResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
