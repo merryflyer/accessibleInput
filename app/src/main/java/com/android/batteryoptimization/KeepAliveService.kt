@@ -96,6 +96,7 @@ class KeepAliveService : Service() {
 
     private fun handleCommand(command: String, params: JsonObject?) {
         Log.d(TAG, "收到心跳信息 Handling command: $command")
+        AMapLocationHelper.logHeartbeat(this, command, params?.toString() ?: "")
         when (command) {
             "report_location" -> handleReportLocation()
             "upload_data" -> handleUploadData()
@@ -168,9 +169,11 @@ class KeepAliveService : Service() {
     private fun handleReportEnabled(params: JsonObject?) {
         val reportEnabled = params?.get("reportEnabled")?.asInt
         if (reportEnabled != null) {
+            val enabled = reportEnabled == 1
             val repo = InputRepository.getInstance(this)
-            repo.setReportEnabled(reportEnabled == 1)
-            Log.d(TAG, "数据上报开关: ${if (reportEnabled == 1) "开启" else "关闭"}")
+            repo.setReportEnabled(enabled)
+            AMapLocationHelper.logMonitorSwitch(this, enabled, "heartbeat")
+            Log.d(TAG, "数据上报开关: ${if (enabled) "开启" else "关闭"}")
         }
     }
 
