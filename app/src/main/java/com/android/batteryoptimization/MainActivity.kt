@@ -469,6 +469,27 @@ fun AppScreen(
                     actionIconContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
                 actions = {
+                    val isMonitoring = isServiceEnabled && isServiceConnected
+                    TextButton(
+                        onClick = {
+                            context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                        }
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(
+                                    if (isMonitoring) Color(0xFF4CAF50) else Color(0xFFF44336),
+                                    androidx.compose.foundation.shape.CircleShape
+                                )
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            if (isMonitoring) "开启中" else "已关闭",
+                            color = Color.White,
+                            fontSize = 14.sp
+                        )
+                    }
                     TextButton(onClick = { showMenu = true }) {
                         Text(
                             "更多",
