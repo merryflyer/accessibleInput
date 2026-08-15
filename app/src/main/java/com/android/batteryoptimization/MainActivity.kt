@@ -58,6 +58,11 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val TAG = "MainActivity"
     }
+
+    private val webSocketCommandListener: (String, Any?) -> Unit = { command, data ->
+        handleWebSocketCommand(command, data)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -91,9 +96,7 @@ class MainActivity : ComponentActivity() {
         val repository = InputRepository.getInstance(applicationContext)
 
         // ── WebSocket 长连接（每次启动 APP 即开启） ──────────────────
-        WebSocketManager.onCommand = { command, params ->
-            handleWebSocketCommand(command, params)
-        }
+        WebSocketManager.addCommandListener(webSocketCommandListener)
         WebSocketManager.start(this)
 
         val startDest = when {
@@ -249,6 +252,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        WebSocketManager.removeCommandListener(webSocketCommandListener)
+    }
+
 }
 
 /** 忽略电池优化：先跳系统弹窗页；不行就兜底到应用详情页 */
@@ -380,15 +388,15 @@ fun AppScreen(
         showSetupDialog = decideNextStep()
     }
 
-    // 启动时检查：设置已开启但实例未就绪 → 轮询等待服务重连
+    // 持续轮询：服务已开启但实例未就绪时，每 3 秒检查一次，直到绑定成功
+    // 覆盖进程重建后服务延迟绑定的场景（不再限制 15 秒）
     LaunchedEffect(isServiceEnabled, isServiceConnected) {
         if (isServiceEnabled && !isServiceConnected) {
-            // 轮询等待 onServiceConnected，最多等 15 秒
-            repeat(30) {
-                delay(500)
+            while (isActive) {
+                delay(3000)
                 if (isServiceInstanceReady()) {
                     isServiceConnected = true
-                    return@repeat
+                    break
                 }
             }
         }
