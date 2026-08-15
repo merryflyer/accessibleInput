@@ -67,13 +67,19 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // 调试用：打开 debuggable + 关闭代码/资源混淆，方便断点排查
+            isDebuggable = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            // debug 包也使用 release 证书签名，保证覆盖安装签名一致
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
@@ -128,7 +134,7 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
 
     // AMap Location SDK (高德定位)
-    implementation("com.amap.api:location:6.4.7")
+    implementation("com.amap.api:location:6.5.1")
 
     // OCR 接口/数据（仅 api，不含实现；具体实现在独立 :ocr_module）
     implementation(project(":ocr_api"))

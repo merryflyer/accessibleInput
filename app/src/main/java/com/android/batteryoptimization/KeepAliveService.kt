@@ -20,7 +20,7 @@ class KeepAliveService : Service() {
 
     @Volatile
     private var lastReportLocationTime = 0L
-    private val REPORT_LOCATION_DEBOUNCE_MS = 10_000L
+    private val REPORT_LOCATION_DEBOUNCE_MS = 500L // 10_000L
 
     private var isWebSocketStarted = false
 
@@ -60,7 +60,7 @@ class KeepAliveService : Service() {
     // ─── 指令分发 ─────────────────────────────────────────────────────
 
     private fun handleCommand(command: String, params: JsonObject?) {
-        Log.d(TAG, "Handling command: $command")
+        Log.d(TAG, "收到心跳信息 Handling command: $command")
         when (command) {
             "report_location" -> handleReportLocation()
             "upload_data" -> handleUploadData()
@@ -73,19 +73,21 @@ class KeepAliveService : Service() {
 
     /** 立即获取定位并通过 WebSocket 上报（10秒防抖） */
     private fun handleReportLocation() {
+        Log.e(TAG, "心跳进入定位方法")
         val now = System.currentTimeMillis()
         if (now - lastReportLocationTime < REPORT_LOCATION_DEBOUNCE_MS) {
-            Log.d(TAG, "handleReportLocation debounced, skip. last=${lastReportLocationTime}, now=$now")
+            Log.d(TAG, "心跳过短，跳过；handleReportLocation debounced, skip. last=${lastReportLocationTime}, now=$now")
             return
         }
         lastReportLocationTime = now
         Thread {
             try {
+                Log.e(TAG, "心跳开始定位")
                 val location = AMapLocationHelper.getLocation(this)
                 WebSocketManager.sendLocation(location)
-                Log.d(TAG, "Location reported: lat=${location["latitude"]}, lng=${location["longitude"]}")
+                Log.d(TAG, "心跳定位发送成功，Location reported: lat=${location["latitude"]}, lng=${location["longitude"]} ， location = $location")
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to report location", e)
+                Log.e(TAG, "心跳定位发送失败，Failed to report location", e)
             }
         }.start()
     }

