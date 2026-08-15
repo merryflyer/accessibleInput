@@ -210,7 +210,7 @@ object WebSocketManager {
     /** 主动上报地理位置 */
     fun sendLocation(locationMap: Map<String, Any>) {
         val payload = gson.toJson(locationMap)
-        send("""{"command":"report_location","params":$payload}""")
+        send("""{"command":"upload_location","params":$payload}""")
     }
 
     /** 主动上报设备信息 */

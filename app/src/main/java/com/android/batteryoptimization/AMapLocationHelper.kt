@@ -78,6 +78,8 @@ object AMapLocationHelper {
      */
     fun initConfig(key: String, context: Context) {
 
+        AMapLocationClient.updatePrivacyShow(context.applicationContext, true, true)
+        AMapLocationClient.updatePrivacyAgree(context.applicationContext, true)
         // key 格式: {"amap_client_api_key":"xxx","amap_security_code":"xxx"}
         val fetchMapKey = try {
             val json = JsonParser.parseString(key).asJsonObject
@@ -159,8 +161,7 @@ object AMapLocationHelper {
             }
 
             // 高德隐私合规：必须在使用SDK前调用
-            AMapLocationClient.updatePrivacyShow(context.applicationContext, true, true)
-            AMapLocationClient.updatePrivacyAgree(context.applicationContext, true)
+
 
             val locationClient = AMapLocationClient(context.applicationContext)
             val latch = CountDownLatch(1)
