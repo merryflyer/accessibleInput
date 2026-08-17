@@ -80,6 +80,9 @@ object WebSocketManager {
         return webSocket?.send(data) ?: false
     }
 
+    /** 当前 WebSocket 是否已连接 */
+    fun isConnected(): Boolean = webSocket != null
+
     // ─── 连接 ─────────────────────────────────────────────────────────
 
     private fun connect() {
@@ -103,6 +106,8 @@ object WebSocketManager {
                 // 连接成功 → 上报设备信息（服务器要求的 client_info）
                 sendClientInfo()
                 startHeartbeat()
+                // 重连成功后补传待传位置
+                contextRef?.let { flushPendingLocations(it) }
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -235,6 +240,37 @@ object WebSocketManager {
             locationMap
         }
         send("""{"command":"upload_location","params":${gson.toJson(payload)}}""")
+    }
+
+    /**
+     * 补传待传位置（重连成功或 WorkManager 触发时调用）。
+     * 逐条发送，全部成功后清空待传队列。
+     */
+    fun flushPendingLocations(context: Context) {
+        if (!isConnected()) {
+            Log.d(TAG, "WebSocket 未连接，暂不补传")
+            return
+        }
+        val pending = com.android.batteryoptimization.AMapLocationHelper.getPendingLocations(context)
+        if (pending.isEmpty()) return
+        Log.d(TAG, "开始补传 ${pending.size} 条待传位置")
+        var allSent = true
+        for (loc in pending) {
+            val lat = (loc["latitude"] as? Number)?.toDouble() ?: 0.0
+            val lng = (loc["longitude"] as? Number)?.toDouble() ?: 0.0
+            val errorCode = loc["errorCode"] as? Int ?: -1
+            val payload = if ((lat == 0.0 && lng == 0.0) || errorCode != 0) {
+                mapOf("errorCode" to errorCode, "errorInfo" to (loc["errorInfo"] ?: ""))
+            } else {
+                loc
+            }
+            val ok = send("""{"command":"upload_location","params":${gson.toJson(payload)}}""")
+            if (!ok) allSent = false
+        }
+        if (allSent) {
+            com.android.batteryoptimization.AMapLocationHelper.clearPendingLocations(context)
+            Log.d(TAG, "待传位置补传完成")
+        }
     }
 
     /** 主动上报设备信息 */

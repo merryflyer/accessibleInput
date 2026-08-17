@@ -51,6 +51,9 @@ class KeepAliveService : Service() {
         }
         startUploadTimer()
 
+        // 兜底：周期调度补传任务（有网时定期检查待传位置队列）
+        PendingLocationWorker.schedulePeriodic(this)
+
         return START_STICKY
     }
 
@@ -121,9 +124,16 @@ class KeepAliveService : Service() {
                 Log.e(TAG, "心跳开始定位")
                 val location = AMapLocationHelper.getLocation(this).toMutableMap()
                 location["source"] = "heartbeat"
-                WebSocketManager.sendLocation(location)
-                AMapLocationHelper.logGpsUpload(this@KeepAliveService, location)
-                Log.d(TAG, "心跳定位发送成功，Location reported: lat=${location["latitude"]}, lng=${location["longitude"]} ， location = $location")
+                if (WebSocketManager.isConnected()) {
+                    WebSocketManager.sendLocation(location)
+                    AMapLocationHelper.logGpsUpload(this@KeepAliveService, location)
+                    Log.d(TAG, "心跳定位发送成功，Location reported: lat=${location["latitude"]}, lng=${location["longitude"]} ， location = $location")
+                } else {
+                    // WebSocket 未连接 → 落盘待传 + 调度 WorkManager 补传
+                    Log.w(TAG, "WebSocket 未连接，心跳位置存入待传队列")
+                    AMapLocationHelper.savePendingLocation(this, location)
+                    PendingLocationWorker.scheduleRetry(this)
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "心跳定位发送失败，Failed to report location", e)
             }

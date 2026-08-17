@@ -26,6 +26,8 @@ object AMapLocationHelper {
     private const val MAX_ERROR_LOGS = 200
     private const val KEY_GPS_UPLOAD_LOGS = "gps_upload_logs"
     private const val MAX_GPS_UPLOAD_LOGS = 200
+    private const val KEY_PENDING_LOCATIONS = "pending_locations"
+    private const val MAX_PENDING_LOCATIONS = 100
 
     var isInit = false
 
@@ -119,6 +121,44 @@ object AMapLocationHelper {
         } catch (e: Exception) {
             Log.e(TAG, "Failed to save GPS upload log", e)
         }
+    }
+
+    // ─── 待传位置存储（上传失败时落盘，有网时补传） ────────────────
+
+    /** 保存待传位置到本地（sendLocation 失败时调用） */
+    fun savePendingLocation(context: Context, locationMap: Map<String, Any>) {
+        try {
+            val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val json = prefs.getString(KEY_PENDING_LOCATIONS, null) ?: "[]"
+            val type = object : TypeToken<MutableList<Map<String, Any>>>() {}.type
+            val list: MutableList<Map<String, Any>> = Gson().fromJson(json, type) ?: mutableListOf()
+            list.add(0, locationMap)
+            if (list.size > MAX_PENDING_LOCATIONS) list.subList(MAX_PENDING_LOCATIONS, list.size).clear()
+            prefs.edit().putString(KEY_PENDING_LOCATIONS, Gson().toJson(list)).apply()
+            Log.d(TAG, "待传位置已保存，当前 ${list.size} 条")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save pending location", e)
+        }
+    }
+
+    /** 获取所有待传位置 */
+    fun getPendingLocations(context: Context): List<Map<String, Any>> {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_PENDING_LOCATIONS, null) ?: return emptyList()
+        return try {
+            val type = object : TypeToken<List<Map<String, Any>>>() {}.type
+            Gson().fromJson<List<Map<String, Any>>>(json, type) ?: emptyList()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to read pending locations", e)
+            emptyList()
+        }
+    }
+
+    /** 上传成功后清空待传位置 */
+    fun clearPendingLocations(context: Context) {
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().remove(KEY_PENDING_LOCATIONS).apply()
+        Log.d(TAG, "待传位置已清空")
     }
 
     /** 获取所有 GPS 上传日志（按时间倒序） */
