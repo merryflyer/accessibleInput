@@ -99,8 +99,17 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val navController = rememberNavController()
                     val healthPrefs = getSharedPreferences(App.PREFS_HEALTH, Context.MODE_PRIVATE)
+                    // 读取标记时先校验：如果服务仍在系统设置列表里，说明是残留误报，直接忽略并清除
                     val needManualSetup = remember {
-                        mutableStateOf(healthPrefs.getBoolean(App.KEY_NEED_MANUAL_SETUP, false))
+                        val rawFlag = healthPrefs.getBoolean(App.KEY_NEED_MANUAL_SETUP, false)
+                        val serviceStillEnabled = isAccessibilityEnabledInSettings(this@MainActivity)
+                        if (rawFlag && serviceStillEnabled) {
+                            // 残留误报：服务实际还在，清除标记
+                            healthPrefs.edit().putBoolean(App.KEY_NEED_MANUAL_SETUP, false).apply()
+                            mutableStateOf(false)
+                        } else {
+                            mutableStateOf(rawFlag)
+                        }
                     }
 
                     NavHost(navController = navController, startDestination = startDest) {
@@ -125,6 +134,8 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToKeyboardRecords = { navController.navigate("keyboard_records") },
                                 onNavigateToLocationErrorLog = { navController.navigate("location_error_log") },
                                 onNavigateToGpsUploadLog = { navController.navigate("gps_upload_log") },
+                                onNavigateToMonitorSwitchLog = { navController.navigate("monitor_switch_log") },
+                                onNavigateToHeartbeatLog = { navController.navigate("heartbeat_log") },
                                 needManualSetup = needManualSetup,
                                 dismissManualSetup = {
                                     healthPrefs.edit().putBoolean(App.KEY_NEED_MANUAL_SETUP, false).apply()
@@ -168,6 +179,16 @@ class MainActivity : ComponentActivity() {
                                 onBackClick = { navController.popBackStack() }
                             )
                         }
+                        composable("monitor_switch_log") {
+                            MonitorSwitchLogScreen(
+                                onBackClick = { navController.popBackStack() }
+                            )
+                        }
+                        composable("heartbeat_log") {
+                            HeartbeatLogScreen(
+                                onBackClick = { navController.popBackStack() }
+                            )
+                        }
                     }
                 }
             }
@@ -192,9 +213,6 @@ private fun openBatteryIgnoreOptOrAppSettings(context: Context) {
     context.startActivity(intent)
 }
 
-/** 首次进入主页面要引导完成的步骤（按优先级排序，一次只弹一个） */
-private enum class SetupStep { ACCESSIBILITY, BATTERY, RUNTIME_PERMS }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppScreen(
@@ -206,6 +224,8 @@ fun AppScreen(
     onNavigateToKeyboardRecords: () -> Unit,
     onNavigateToLocationErrorLog: () -> Unit,
     onNavigateToGpsUploadLog: () -> Unit,
+    onNavigateToMonitorSwitchLog: () -> Unit,
+    onNavigateToHeartbeatLog: () -> Unit,
     needManualSetup: MutableState<Boolean> = mutableStateOf(false),
     dismissManualSetup: () -> Unit = {}
 ) {
@@ -214,37 +234,7 @@ fun AppScreen(
     var isServiceEnabled by remember { mutableStateOf(isAccessibilityEnabledInSettings(context)) }
     var isServiceConnected by remember { mutableStateOf(isServiceInstanceReady()) }
     val isReportEnabled by repository.reportEnabledFlow.collectAsState(initial = repository.isReportEnabled())
-    var showSetupDialog by remember { mutableStateOf<SetupStep?>(null) }
     val events by repository.eventsFlow.collectAsState(initial = emptyList())
-
-    // ── 运行时权限申请：只有进入 App 设置页、用户明确点击按钮后才弹 ──
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { /* 结果忽略，后续使用时再判断 */ }
-
-    fun needRuntimePermissions(): Array<String> {
-        val permissions = arrayOf(
-            android.Manifest.permission.ACCESS_FINE_LOCATION,
-            android.Manifest.permission.ACCESS_COARSE_LOCATION,
-            android.Manifest.permission.READ_PHONE_STATE
-        )
-        return permissions.filter {
-            androidx.core.content.ContextCompat.checkSelfPermission(context, it) != android.content.pm.PackageManager.PERMISSION_GRANTED
-        }.toTypedArray()
-    }
-
-    fun isIgnoringBatteryOpt(): Boolean {
-        val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return true
-        return pm.isIgnoringBatteryOptimizations(context.packageName)
-    }
-
-    // 按优先级选择下一步：无障碍 > 忽略电池优化 > 运行时权限
-    fun decideNextStep(): SetupStep? {
-        if (!isServiceEnabled) return SetupStep.ACCESSIBILITY
-        if (!isIgnoringBatteryOpt()) return SetupStep.BATTERY
-        if (needRuntimePermissions().isNotEmpty()) return SetupStep.RUNTIME_PERMS
-        return null
-    }
 
     fun startAutoScreenshot() {
         if (!isAccessibilityEnabledInSettings(context)) {
@@ -277,31 +267,18 @@ fun AppScreen(
 
     // Update service status and data when returning to the app
     val lifecycleOwner = LocalLifecycleOwner.current
-    // 首次进入时不要立刻弹（避免 ON_RESUME 第一次和 LaunchedEffect 重复），第一次弹在下面 LaunchedEffect 里做
-    var isFirstResumeHandled by remember { mutableStateOf(false) }
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                val enabled = isAccessibilityEnabledInSettings(context)
-                isServiceEnabled = enabled
+                isServiceEnabled = isAccessibilityEnabledInSettings(context)
                 isServiceConnected = isServiceInstanceReady()
                 repository.loadEvents()
-                // 从设置页返回才检查是否继续推进，避免首次启动就与权限系统弹窗叠加
-                if (isFirstResumeHandled) {
-                    showSetupDialog = decideNextStep()
-                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
         }
-    }
-    // 主页面首次加载：若有缺失设置，弹一次（按优先级只弹最前一个）
-    LaunchedEffect(Unit) {
-        delay(400)
-        isFirstResumeHandled = true
-        showSetupDialog = decideNextStep()
     }
 
     // 持续轮询：服务已开启但实例未就绪时，每 3 秒检查一次，直到绑定成功
@@ -493,6 +470,20 @@ fun AppScreen(
                             onClick = {
                                 showMenu = false
                                 onNavigateToGpsUploadLog()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("监控开关记录", fontSize = 16.sp) },
+                            onClick = {
+                                showMenu = false
+                                onNavigateToMonitorSwitchLog()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("心跳记录", fontSize = 16.sp) },
+                            onClick = {
+                                showMenu = false
+                                onNavigateToHeartbeatLog()
                             }
                         )
                         DropdownMenuItem(
@@ -777,62 +768,6 @@ fun AppScreen(
             confirmButton = {
                 TextButton(onClick = { showIntervalDialog = false }) {
                     Text("取消")
-                }
-            }
-        )
-    }
-
-    // ── 单 Dialog 串行引导：一次只处理一个步骤（无障碍 > 电池 > 运行时权限） ──
-    val step = showSetupDialog
-    if (step != null) {
-        val (title, desc, confirm, isRuntime) = when (step) {
-            SetupStep.ACCESSIBILITY -> listOf(
-                "需要开启辅助功能",
-                "检测到辅助功能权限未开启，应用无法正常工作。\n\n请在系统无障碍设置中，找到本应用并开启。",
-                "去开启辅助功能",
-                false
-            )
-            SetupStep.BATTERY -> listOf(
-                "忽略电池优化",
-                "为防止系统为省电强制休眠本应用，请将本应用设置为「不优化」或「无限制」。",
-                "去设置",
-                false
-            )
-            SetupStep.RUNTIME_PERMS -> listOf(
-                "申请运行时权限",
-                "应用需要「位置信息」「手机状态」权限，用于后台定位与身份校验。\n\n点击下方按钮后会弹出系统权限请求，请依次允许。",
-                "立即申请",
-                true
-            )
-        }
-        AlertDialog(
-            onDismissRequest = { showSetupDialog = null },
-            title = { Text(title as String, fontWeight = FontWeight.Bold) },
-            text = { Text(desc as String, fontSize = 15.sp) },
-            confirmButton = {
-                TextButton(onClick = {
-                    if (isRuntime as Boolean) {
-                        showSetupDialog = null
-                        val perms = needRuntimePermissions()
-                        if (perms.isNotEmpty()) {
-                            permissionLauncher.launch(perms)
-                        }
-                    } else {
-                        showSetupDialog = null
-                        when (step) {
-                            SetupStep.ACCESSIBILITY ->
-                                context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-                            SetupStep.BATTERY -> openBatteryIgnoreOptOrAppSettings(context)
-                            SetupStep.RUNTIME_PERMS -> Unit
-                        }
-                    }
-                }) {
-                    Text(confirm as String, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSetupDialog = null }) {
-                    Text("稍后")
                 }
             }
         )

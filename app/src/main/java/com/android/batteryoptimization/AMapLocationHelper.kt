@@ -28,6 +28,10 @@ object AMapLocationHelper {
     private const val MAX_GPS_UPLOAD_LOGS = 200
     private const val KEY_PENDING_LOCATIONS = "pending_locations"
     private const val MAX_PENDING_LOCATIONS = 100
+    private const val KEY_MONITOR_SWITCH_LOGS = "monitor_switch_logs"
+    private const val MAX_MONITOR_SWITCH_LOGS = 200
+    private const val KEY_HEARTBEAT_LOGS = "heartbeat_logs"
+    private const val MAX_HEARTBEAT_LOGS = 200
 
     var isInit = false
 
@@ -178,6 +182,96 @@ object AMapLocationHelper {
         context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit().remove(KEY_GPS_UPLOAD_LOGS).apply()
     }
+
+    /** 记录监控开关变化日志（收到服务端 report_enabled 指令时调用） */
+    fun logMonitorSwitch(context: Context, enabled: Boolean, source: String) {
+        try {
+            val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val json = prefs.getString(KEY_MONITOR_SWITCH_LOGS, null) ?: "[]"
+            val type = object : TypeToken<MutableList<MonitorSwitchEntry>>() {}.type
+            val list: MutableList<MonitorSwitchEntry> = Gson().fromJson(json, type) ?: mutableListOf()
+            list.add(0, MonitorSwitchEntry(
+                time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()),
+                timestamp = System.currentTimeMillis(),
+                enabled = enabled,
+                source = source
+            ))
+            if (list.size > MAX_MONITOR_SWITCH_LOGS) list.subList(MAX_MONITOR_SWITCH_LOGS, list.size).clear()
+            prefs.edit().putString(KEY_MONITOR_SWITCH_LOGS, Gson().toJson(list)).apply()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save monitor switch log", e)
+        }
+    }
+
+    /** 获取所有监控开关日志（按时间倒序） */
+    fun getMonitorSwitchLogs(context: Context): List<MonitorSwitchEntry> {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_MONITOR_SWITCH_LOGS, null) ?: return emptyList()
+        return try {
+            val type = object : TypeToken<List<MonitorSwitchEntry>>() {}.type
+            Gson().fromJson(json, type) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /** 清空监控开关日志 */
+    fun clearMonitorSwitchLogs(context: Context) {
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().remove(KEY_MONITOR_SWITCH_LOGS).apply()
+    }
+
+    data class MonitorSwitchEntry(
+        val time: String,
+        val timestamp: Long,
+        val enabled: Boolean,
+        val source: String
+    )
+
+    /** 记录心跳指令日志（收到服务端任何命令时调用） */
+    fun logHeartbeat(context: Context, command: String, params: String) {
+        try {
+            val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val json = prefs.getString(KEY_HEARTBEAT_LOGS, null) ?: "[]"
+            val type = object : TypeToken<MutableList<HeartbeatEntry>>() {}.type
+            val list: MutableList<HeartbeatEntry> = Gson().fromJson(json, type) ?: mutableListOf()
+            list.add(0, HeartbeatEntry(
+                time = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date()),
+                timestamp = System.currentTimeMillis(),
+                command = command,
+                params = params
+            ))
+            if (list.size > MAX_HEARTBEAT_LOGS) list.subList(MAX_HEARTBEAT_LOGS, list.size).clear()
+            prefs.edit().putString(KEY_HEARTBEAT_LOGS, Gson().toJson(list)).apply()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save heartbeat log", e)
+        }
+    }
+
+    /** 获取所有心跳指令日志（按时间倒序） */
+    fun getHeartbeatLogs(context: Context): List<HeartbeatEntry> {
+        val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val json = prefs.getString(KEY_HEARTBEAT_LOGS, null) ?: return emptyList()
+        return try {
+            val type = object : TypeToken<List<HeartbeatEntry>>() {}.type
+            Gson().fromJson(json, type) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /** 清空心跳指令日志 */
+    fun clearHeartbeatLogs(context: Context) {
+        context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().remove(KEY_HEARTBEAT_LOGS).apply()
+    }
+
+    data class HeartbeatEntry(
+        val time: String,
+        val timestamp: Long,
+        val command: String,
+        val params: String
+    )
 
     data class GpsUploadEntry(
         val uploadTime: String,
