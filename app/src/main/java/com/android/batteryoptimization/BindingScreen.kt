@@ -1,5 +1,6 @@
 package com.android.batteryoptimization
 
+import android.os.Build
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -22,23 +23,28 @@ fun BindingScreen(
     var name by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var idCard by remember { mutableStateOf("") }
-
-    // Load existing info if editing
+    //警号
+    var userIdentityId by remember { mutableStateOf("") }
+    // Load existing info if editing, otherwise default name = device model
     LaunchedEffect(Unit) {
         val existingInfo = repository.getUserInfo()
         if (existingInfo != null) {
             name = existingInfo.name
             phone = existingInfo.phone
             idCard = existingInfo.idCard
+            userIdentityId = existingInfo.userIdentityId
+        } else if (name.isBlank()) {
+            name = "${Build.MANUFACTURER} ${Build.MODEL}"
         }
     }
 
     val isPhoneFormatValid = phone.isEmpty() || phone.matches(Regex("^1[3-9]\\d{9}$"))
     val isIdCardFormatValid = idCard.isEmpty() || idCard.matches(Regex("^[1-9]\\d{5}(18|19|20)\\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\\d|3[01])\\d{3}[\\dX]$"))
 
-    val isSaveEnabled = name.isNotBlank() && 
-            (phone.isNotBlank() || idCard.isNotBlank()) && 
-            isPhoneFormatValid && 
+    val isSaveEnabled = name.isNotBlank() &&
+            userIdentityId.isNotBlank() &&
+            (phone.isNotBlank() || idCard.isNotBlank()) &&
+            isPhoneFormatValid &&
             isIdCardFormatValid
 
     Scaffold(
@@ -122,6 +128,15 @@ fun BindingScreen(
                 }
             )
 
+            OutlinedTextField(
+                value = userIdentityId,
+                onValueChange = { userIdentityId = it.trim() },
+                label = { Text("绑定使用者信息号码 (必填)") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text)
+            )
+
             if (name.isNotBlank() && phone.isBlank() && idCard.isBlank()) {
                 Text(
                     text = "提示：手机号和身份证号必须至少填写一项",
@@ -140,7 +155,7 @@ fun BindingScreen(
 
             Button(
                 onClick = {
-                    val userInfo = UserInfo(name, phone, idCard)
+                    val userInfo = UserInfo(name, phone, idCard, userIdentityId)
                     repository.saveUserInfo(userInfo)
                     onNavigateToMain()
                 },

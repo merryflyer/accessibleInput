@@ -21,3 +21,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "AccessibleInput"
 include(":app")
+include(":ocr_api")
+include(":ocr_module")
+include(":PaddleOCR4Android")

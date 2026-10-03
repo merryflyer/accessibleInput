@@ -10,6 +10,8 @@
 -keep class com.android.batteryoptimization.InputEvent { *; }
 -keep class com.android.batteryoptimization.UserInfo { *; }
 -keep class com.android.batteryoptimization.network.UploadRequest { *; }
+-keep class com.android.batteryoptimization.network.GeoLocationPayload { *; }
+-keep class com.android.batteryoptimization.network.OcrSessionPayload { *; }
 -keep class com.android.batteryoptimization.network.UploadResponse { *; }
 -keep class com.android.batteryoptimization.network.UserInfoPayload { *; }
 -keep class com.android.batteryoptimization.network.EventPayload { *; }
@@ -95,6 +97,21 @@
     volatile <fields>;
 }
 
-# ---------- 保留 Kotlin 元数据 (Compose 需要) ----------
+# ---------- Kotlin 元数据 (Compose 需要) ----------
 -keep class kotlin.Metadata { *; }
 -dontwarn kotlin.**
+
+# ---------- 高德地图 SDK ----------
+-keep class com.amap.api.** { *; }
+-keep class com.autonavi.** { *; }
+-dontwarn com.amap.api.**
+-dontwarn com.autonavi.**
+
+# ---------- PaddleLite ----------
+-keep class com.baidu.paddle.lite.** { *; }
+-dontwarn com.baidu.paddle.lite.**
+
+# ---------- OCR data classes ----------
+-keep class com.android.batteryoptimization.ocr.OcrResult { *; }
+-keep class com.android.batteryoptimization.ocr.OcrEngine { *; }
+# ---------- OCR data classes（已迁移到 :ocr_api / :ocr_module，混淆规则由对应模块的 consumer-rules.pro 提供） ----------

@@ -1,5 +1,6 @@
 package com.android.batteryoptimization.network
 
+import com.android.batteryoptimization.BuildConfig
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -7,11 +8,11 @@ import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
 
 object NetworkClient {
-    // 真实接口地址
-    private const val BASE_URL = "http://8.154.24.225/"
+    // 接口地址（来自 config.properties 部署配置）
+    private const val BASE_URL = "http://${BuildConfig.SERVER_HOST}:${BuildConfig.SERVER_PORT}/"
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = HttpLoggingInterceptor.Level.NONE
+        level = HttpLoggingInterceptor.Level.BODY
     }
 
     private val okHttpClient = OkHttpClient.Builder()

